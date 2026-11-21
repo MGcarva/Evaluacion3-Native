@@ -1,0 +1,15 @@
+# Evidencia 08-tests-aws
+# Fecha (UTC): 2026-11-21T23:20:04Z
+# Entorno: aws
+
+$ docker compose run --rm tests 2>&1 | grep -E "Tests run:|BUILD"
+
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.616 s -- in cl.duoc.ventas.SaleValidatorTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.833 s -- in cl.duoc.ventas.StreamsTopologyTest$Tardios
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.152 s -- in cl.duoc.ventas.StreamsTopologyTest$Agregacion
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.244 s -- in cl.duoc.ventas.StreamsTopologyTest$Duplicados
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.630 s -- in cl.duoc.ventas.StreamsTopologyTest$Dlq
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 5.885 s -- in cl.duoc.ventas.StreamsTopologyTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in cl.duoc.ventas.AppConfigTest
+[INFO] Tests run: 23, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS

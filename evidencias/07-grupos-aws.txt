@@ -1,0 +1,31 @@
+# Evidencia 07-grupos-aws
+# Fecha (UTC): 2026-11-21T23:19:25Z
+# Entorno: aws
+
+$ ./scripts/kafka.sh grupos
+
+
+=== Consumer groups ===
+console-consumer-60175
+console-consumer-74682
+console-consumer-34834
+ventas-aggregator
+console-consumer-13089
+
+=== Offsets y lag de ventas-aggregator ===
+
+GROUP             TOPIC                                           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                                                                                         HOST            CLIENT-ID
+ventas-aggregator ventas-raw                                      1          383             383             0               ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer-793b9765-171e-4d7f-bb96-549abc3b538b /172.18.0.7     ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer
+ventas-aggregator ventas-aggregator-por-eventid-repartition       0          585             585             0               ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer-793b9765-171e-4d7f-bb96-549abc3b538b /172.18.0.7     ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer
+ventas-aggregator ventas-raw                                      2          383             383             0               ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer-793b9765-171e-4d7f-bb96-549abc3b538b /172.18.0.7     ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer
+ventas-aggregator ventas-aggregator-por-eventid-repartition       2          555             555             0               ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer-793b9765-171e-4d7f-bb96-549abc3b538b /172.18.0.7     ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer
+ventas-aggregator ventas-aggregator-ventas-por-tienda-repartition 1          822             822             0               ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer-793b9765-171e-4d7f-bb96-549abc3b538b /172.18.0.7     ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer
+ventas-aggregator ventas-aggregator-por-eventid-repartition       1          487             487             0               ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer-793b9765-171e-4d7f-bb96-549abc3b538b /172.18.0.7     ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer
+ventas-aggregator ventas-aggregator-ventas-por-tienda-repartition 2          670             670             0               ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer-793b9765-171e-4d7f-bb96-549abc3b538b /172.18.0.7     ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer
+ventas-aggregator ventas-aggregator-ventas-por-tienda-repartition 0          6               6               0               ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer-793b9765-171e-4d7f-bb96-549abc3b538b /172.18.0.7     ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer
+ventas-aggregator ventas-raw                                      0          400             400             0               ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer-793b9765-171e-4d7f-bb96-549abc3b538b /172.18.0.7     ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer
+
+=== Miembros de ventas-aggregator ===
+
+GROUP             CONSUMER-ID                                                                                                         HOST            CLIENT-ID                                                                      #PARTITIONS     
+ventas-aggregator ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer-793b9765-171e-4d7f-bb96-549abc3b538b /172.18.0.7     ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1-consumer 9               

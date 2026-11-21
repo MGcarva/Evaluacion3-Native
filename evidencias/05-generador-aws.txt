@@ -1,0 +1,63 @@
+# Evidencia 05-generador-aws
+# Fecha (UTC): 2026-11-21T23:18:47Z
+# Entorno: aws
+
+$ 
+docker compose run --rm generator todos 2>&1 | grep -E "^(==|--|  \[)"
+sleep 10
+echo; echo "## DLQ"; ./scripts/kafka.sh dlq 30 | grep -E "invalid|inv-" | tail -6
+echo; echo "## Agregados de prueba"; ./scripts/kafka.sh agregadas 500 | grep "Prueba"
+echo; echo "## Logs"; ./scripts/kafka.sh logs | grep -E "duplicado|Skipping|rechazado" | tail -10
+
+== Generador de casos: escenario=todos run=231434 topico=ventas-raw ventana=60s gracia=120s
+-- INVALIDOS -> deben ir a ventas-raw-dlq con su motivo; la app sigue activa
+  [invalido-malformado   ] clave=inv-231434-json        -> ventas-raw-0@392 | esperado: JSON_INVALIDO
+  [invalido-vacio        ] clave=inv-231434-vacio       -> ventas-raw-1@379 | esperado: VALOR_VACIO
+  [invalido-sin-store    ] clave=inv-231434-sin-store   -> ventas-raw-2@381 | esperado: CAMPO_OBLIGATORIO_AUSENTE: store
+  [invalido-eventtime    ] clave=inv-231434-fecha       -> ventas-raw-1@380 | esperado: EVENTTIME_INVALIDO
+  [invalido-cantidad     ] clave=inv-231434-cantidad    -> ventas-raw-0@393 | esperado: CANTIDAD_INVALIDA
+  [invalido-total        ] clave=inv-231434-total       -> ventas-raw-2@382 | esperado: TOTAL_INCONSISTENTE: esperado=2000 recibido=5000
+-- DUPLICADOS -> misma venta 3 veces; 'Prueba Duplicados 231434' debe contar 1 venta de 3000
+  [duplicado-original    ] clave=cliente-A              -> ventas-raw-0@394 | esperado: se cuenta
+  [duplicado-copia-1     ] clave=cliente-B              -> ventas-raw-0@395 | esperado: log 'duplicado ignorado'
+  [duplicado-copia-2     ] clave=cliente-C              -> ventas-raw-0@396 | esperado: log 'duplicado ignorado'
+-- TARDIOS -> tienda 'Prueba Tardios 231434' T0=2026-11-21T23:15:05Z
+  [tardio-normal         ] clave=cliente-tardio         -> ventas-raw-0@397 | esperado: ventana 2026-11-21T23:15:00Z-2026-11-21T23:16:00Z (avanza el reloj a T0)
+  [tardio-dentro-gracia  ] clave=cliente-tardio         -> ventas-raw-0@398 | esperado: fuera de orden pero DENTRO de la gracia -> se suma a ventana 2026-11-21T23:14:00Z-2026-11-21T23:15:00Z
+  [tardio-fuera-gracia   ] clave=cliente-tardio         -> ventas-raw-0@399 | esperado: FUERA de la gracia -> descartado (log 'Skipping record for expired window', NO va a DLQ)
+-- Esperando 185 s para que cierren las ventanas (ventana + gracia + 5 s)...
+  [empujador             ] clave=cliente-empujador      -> ventas-raw-1@381 | esperado: avanza el reloj de 'Prueba Duplicados 231434' para que suppress publique
+  [empujador             ] clave=cliente-empujador      -> ventas-raw-1@382 | esperado: avanza el reloj de 'Prueba Tardios 231434' para que suppress publique
+== Fin. Verificar con: scripts/kafka.ps1 dlq | agregadas | logs
+
+## DLQ
+[2026-11-21 23:18:33,674] ERROR Error processing message, terminating consumer process:  (kafka.tools.ConsoleConsumer$)
+org.apache.kafka.common.errors.TimeoutException
+Processed a total of 6 messages
+Partition:1	Offset:0	inv-231434-vacio	{"correlationId":"50803feb-3f8a-4e82-b533-84ccf0052e4a","sourceTopic":"ventas-raw","key":"inv-231434-vacio","originalValue":"","reason":"VALOR_VACIO","detectedAt":"2026-11-21T23:14:35.974848201Z"}
+Partition:1	Offset:1	inv-231434-fecha	{"correlationId":"6d4892e2-9cd9-4359-9563-640dd22a5e92","sourceTopic":"ventas-raw","key":"inv-231434-fecha","originalValue":"{\"eventId\":\"inv-231434-fecha\",\"eventTime\":\"ayer a las 10\",\"store\":\"Tienda X\",\"storeFormat\":\"tienda\",\"city\":\"Santiago\",\"channel\":\"presencial\",\"category\":\"ropa\",\"product\":\"Polera\",\"quantity\":1,\"unitPriceClp\":1000,\"totalClp\":1000,\"customerId\":\"cliente-prueba\",\"paymentMethod\":\"debito\"}","reason":"EVENTTIME_INVALIDO: ayer a las 10","detectedAt":"2026-11-21T23:14:36.172386124Z"}
+Partition:2	Offset:0	inv-231434-sin-store	{"correlationId":"5c6cbbb0-b5d1-429d-8544-1d5fe17bff1b","sourceTopic":"ventas-raw","key":"inv-231434-sin-store","originalValue":"{\"eventId\":\"inv-231434-sin-store\",\"eventTime\":\"2026-11-21T22:14:34Z\",\"store\":null,\"storeFormat\":\"tienda\",\"city\":\"Santiago\",\"channel\":\"presencial\",\"category\":\"ropa\",\"product\":\"Polera\",\"quantity\":1,\"unitPriceClp\":1000,\"totalClp\":1000,\"customerId\":\"cliente-prueba\",\"paymentMethod\":\"debito\"}","reason":"CAMPO_OBLIGATORIO_AUSENTE: store","detectedAt":"2026-11-21T23:14:36.155369857Z"}
+Partition:2	Offset:1	inv-231434-total	{"correlationId":"e151da19-88ae-4f82-b4b0-ff9f2755fc41","sourceTopic":"ventas-raw","key":"inv-231434-total","originalValue":"{\"eventId\":\"inv-231434-total\",\"eventTime\":\"2026-11-21T22:14:34Z\",\"store\":\"Tienda X\",\"storeFormat\":\"tienda\",\"city\":\"Santiago\",\"channel\":\"presencial\",\"category\":\"ropa\",\"product\":\"Polera\",\"quantity\":2,\"unitPriceClp\":1000,\"totalClp\":5000,\"customerId\":\"cliente-prueba\",\"paymentMethod\":\"debito\"}","reason":"TOTAL_INCONSISTENTE: esperado=2000 recibido=5000","detectedAt":"2026-11-21T23:14:36.231672425Z"}
+Partition:0	Offset:0	inv-231434-json	{"correlationId":"e18e445c-ec88-4abd-8e5a-965eb99a1cd8","sourceTopic":"ventas-raw","key":"inv-231434-json","originalValue":"{\"eventId\":\"inv-231434-json\",\"eventTime\":\"2026-11-21T22:14:34Z\",\"store\":","reason":"JSON_INVALIDO: JsonEOFException","detectedAt":"2026-11-21T23:14:35.870068502Z"}
+Partition:0	Offset:1	inv-231434-cantidad	{"correlationId":"aae6a7e9-e596-4b5d-b989-def8aecb154c","sourceTopic":"ventas-raw","key":"inv-231434-cantidad","originalValue":"{\"eventId\":\"inv-231434-cantidad\",\"eventTime\":\"2026-11-21T22:14:34Z\",\"store\":\"Tienda X\",\"storeFormat\":\"tienda\",\"city\":\"Santiago\",\"channel\":\"presencial\",\"category\":\"ropa\",\"product\":\"Polera\",\"quantity\":0,\"unitPriceClp\":1000,\"totalClp\":0,\"customerId\":\"cliente-prueba\",\"paymentMethod\":\"debito\"}","reason":"CANTIDAD_INVALIDA: 0","detectedAt":"2026-11-21T23:14:36.194929077Z"}
+
+## Agregados de prueba
+[2026-11-21 23:18:47,225] ERROR Error processing message, terminating consumer process:  (kafka.tools.ConsoleConsumer$)
+org.apache.kafka.common.errors.TimeoutException
+Processed a total of 62 messages
+Partition:1	Offset:41	Prueba Duplicados 231434	{"store":"Prueba Duplicados 231434","window_start":"2026-11-21T23:14:00Z","window_end":"2026-11-21T23:15:00Z","sales_count":1,"total_clp":3000,"avg_ticket_clp":3000}
+Partition:2	Offset:19	Prueba Reinicio 230700	{"store":"Prueba Reinicio 230700","window_start":"2026-11-21T23:07:00Z","window_end":"2026-11-21T23:08:00Z","sales_count":1,"total_clp":1000,"avg_ticket_clp":1000}
+Partition:0	Offset:0	Prueba Tardios 231434	{"store":"Prueba Tardios 231434","window_start":"2026-11-21T23:14:00Z","window_end":"2026-11-21T23:15:00Z","sales_count":1,"total_clp":2000,"avg_ticket_clp":2000}
+Partition:0	Offset:1	Prueba Tardios 231434	{"store":"Prueba Tardios 231434","window_start":"2026-11-21T23:15:00Z","window_end":"2026-11-21T23:16:00Z","sales_count":1,"total_clp":1000,"avg_ticket_clp":1000}
+
+## Logs
+[ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1] WARN org.apache.kafka.streams.kstream.internals.KStreamWindowAggregate - Skipping record for expired window. topic=[ventas-aggregator-ventas-por-tienda-repartition] partition=[2] offset=[646] timestamp=[1795302293000] window=[1795302240000,1795302300000) expiration=[1795302476214] streamTime=[1795302596214]
+[ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1] WARN cl.duoc.ventas.StreamsApp - evento rechazado correlationId=e18e445c-ec88-4abd-8e5a-965eb99a1cd8 topico=ventas-raw clave=inv-231434-json motivo=JSON_INVALIDO: JsonEOFException
+[ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1] WARN cl.duoc.ventas.StreamsApp - evento rechazado correlationId=50803feb-3f8a-4e82-b533-84ccf0052e4a topico=ventas-raw clave=inv-231434-vacio motivo=VALOR_VACIO
+[ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1] WARN cl.duoc.ventas.StreamsApp - evento rechazado correlationId=5c6cbbb0-b5d1-429d-8544-1d5fe17bff1b topico=ventas-raw clave=inv-231434-sin-store motivo=CAMPO_OBLIGATORIO_AUSENTE: store
+[ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1] WARN cl.duoc.ventas.StreamsApp - evento rechazado correlationId=6d4892e2-9cd9-4359-9563-640dd22a5e92 topico=ventas-raw clave=inv-231434-fecha motivo=EVENTTIME_INVALIDO: ayer a las 10
+[ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1] WARN cl.duoc.ventas.StreamsApp - evento rechazado correlationId=aae6a7e9-e596-4b5d-b989-def8aecb154c topico=ventas-raw clave=inv-231434-cantidad motivo=CANTIDAD_INVALIDA: 0
+[ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1] WARN cl.duoc.ventas.StreamsApp - evento rechazado correlationId=e151da19-88ae-4f82-b4b0-ff9f2755fc41 topico=ventas-raw clave=inv-231434-total motivo=TOTAL_INCONSISTENTE: esperado=2000 recibido=5000
+[ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1] INFO cl.duoc.ventas.DeduplicadorPorEventId - duplicado ignorado eventId=dup-231434 store=Prueba Duplicados 231434 eventTime=1795302876000 primerEventTime=1795302876000 origen=ventas-aggregator-por-eventid-repartition-0@580
+[ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1] INFO cl.duoc.ventas.DeduplicadorPorEventId - duplicado ignorado eventId=dup-231434 store=Prueba Duplicados 231434 eventTime=1795302876000 primerEventTime=1795302876000 origen=ventas-aggregator-por-eventid-repartition-0@581
+[ventas-aggregator-d87ac89b-6d5d-49b2-b241-35ec61df5b19-StreamThread-1] WARN org.apache.kafka.streams.kstream.internals.KStreamWindowAggregate - Skipping record for expired window. topic=[ventas-aggregator-ventas-por-tienda-repartition] partition=[0] offset=[2] timestamp=[1795302665000] window=[1795302660000,1795302720000) expiration=[1795302785000] streamTime=[1795302905000]

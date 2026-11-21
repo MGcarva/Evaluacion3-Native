@@ -1,0 +1,34 @@
+# Evidencia 06-config-aws
+# Fecha (UTC): 2026-11-21T23:19:17Z
+# Entorno: aws
+
+$ ./scripts/kafka.sh config
+
+
+=== Configuracion relevante de ventas-raw ===
+  cleanup.policy=delete  [DEFAULT_CONFIG]
+  min.insync.replicas=1  [DYNAMIC_TOPIC_CONFIG]
+  retention.ms=604800000  [DYNAMIC_TOPIC_CONFIG]
+  segment.bytes=1073741824  [DEFAULT_CONFIG]
+  unclean.leader.election.enable=false  [DEFAULT_CONFIG]
+
+=== Configuracion relevante de ventas-agregadas ===
+  cleanup.policy=delete  [DEFAULT_CONFIG]
+  min.insync.replicas=1  [DYNAMIC_TOPIC_CONFIG]
+  retention.ms=604800000  [DYNAMIC_TOPIC_CONFIG]
+  segment.bytes=1073741824  [DEFAULT_CONFIG]
+  unclean.leader.election.enable=false  [DEFAULT_CONFIG]
+
+=== Configuracion relevante de ventas-raw-dlq ===
+  cleanup.policy=delete  [DEFAULT_CONFIG]
+  min.insync.replicas=1  [DYNAMIC_TOPIC_CONFIG]
+  retention.ms=2592000000  [DYNAMIC_TOPIC_CONFIG]
+  segment.bytes=1073741824  [DEFAULT_CONFIG]
+  unclean.leader.election.enable=false  [DEFAULT_CONFIG]
+
+=== Broker 1: replicacion por defecto ===
+  default.replication.factor=2  [STATIC_BROKER_CONFIG]
+  min.insync.replicas=1  [STATIC_BROKER_CONFIG]
+  offsets.topic.replication.factor=2  [STATIC_BROKER_CONFIG]
+  transaction.state.log.min.isr=1  [STATIC_BROKER_CONFIG]
+  transaction.state.log.replication.factor=2  [STATIC_BROKER_CONFIG]

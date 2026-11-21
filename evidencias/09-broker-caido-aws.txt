@@ -1,0 +1,106 @@
+# Evidencia 09 - Prueba de broker detenido (requisito 9 / indicador 6)
+# Fecha (UTC): 2026-11-21T23:03:09Z  Entorno: aws
+# Comando: bash scripts/prueba-broker-caido.sh
+
+################ [23:03:09] FASE 0 - ANTES (cluster sano) ################
+-- min.insync.replicas=1 aplicado a: ventas-raw ventas-agregadas ventas-raw-dlq
+-- brokers en ZooKeeper: [1, 2]
+	Topic: ventas-agregadas	Partition: 0	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-agregadas	Partition: 1	Leader: 2	Replicas: 2,1	Isr: 2,1
+	Topic: ventas-agregadas	Partition: 2	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-raw	Partition: 0	Leader: 2	Replicas: 2,1	Isr: 2,1
+	Topic: ventas-raw	Partition: 1	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-raw	Partition: 2	Leader: 2	Replicas: 2,1	Isr: 2,1
+	Topic: ventas-raw-dlq	Partition: 0	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-raw-dlq	Partition: 1	Leader: 2	Replicas: 2,1	Isr: 2,1
+	Topic: ventas-raw-dlq	Partition: 2	Leader: 1	Replicas: 1,2	Isr: 1,2
+-- sub-replicadas:
+0
+-- bajo min ISR:
+0
+
+### [23:03:59] Carga en curso: productor con acks=all, idempotente, ~5 ventas/s. Offsets ventas-raw al inicio=0, enviadas=32
+-- lag total de ventas-aggregator en ventas-raw: 6
+-- ventas-streams: running, hilos de procesamiento vivos (Prometheus): 1
+
+################ [23:04:04] FASE 1 - Se detiene kafka-2 (docker compose stop kafka-2) con min.insync.replicas=1 ################
+ Container ventas-kafka-2 Stopped 
+-- brokers en ZooKeeper: [1]
+	Topic: ventas-agregadas	Partition: 0	Leader: 1	Replicas: 1,2	Isr: 1
+	Topic: ventas-agregadas	Partition: 1	Leader: 1	Replicas: 2,1	Isr: 1
+	Topic: ventas-agregadas	Partition: 2	Leader: 1	Replicas: 1,2	Isr: 1
+	Topic: ventas-raw	Partition: 0	Leader: 1	Replicas: 2,1	Isr: 1
+	Topic: ventas-raw	Partition: 1	Leader: 1	Replicas: 1,2	Isr: 1
+	Topic: ventas-raw	Partition: 2	Leader: 1	Replicas: 2,1	Isr: 1
+	Topic: ventas-raw-dlq	Partition: 0	Leader: 1	Replicas: 1,2	Isr: 1
+	Topic: ventas-raw-dlq	Partition: 1	Leader: 1	Replicas: 2,1	Isr: 1
+	Topic: ventas-raw-dlq	Partition: 2	Leader: 1	Replicas: 1,2	Isr: 1
+-- sub-replicadas:
+124
+-- bajo min ISR:
+0
+
+### [23:04:39] Produccion durante la caida (min ISR=1): 179 ventas confirmadas en ~20 s -> SE SIGUE PRODUCIENDO
+-- lag total de ventas-aggregator en ventas-raw: 6
+-- ventas-streams: running, hilos de procesamiento vivos (Prometheus): 1
+
+################ [23:04:41] FASE 2 - Con kafka-2 caido: min.insync.replicas=2 (prioriza durabilidad) ################
+-- min.insync.replicas=2 aplicado a: ventas-raw ventas-agregadas ventas-raw-dlq
+-- bajo min ISR:
+9
+
+### [23:05:22] Produccion con min ISR=2 y 1 solo broker: 0 ventas confirmadas en 25 s -> BLOQUEADA (NotEnoughReplicas, el productor reintenta)
+-- advertencias del productor:
+[kafka-producer-network-thread | producer-1] WARN org.apache.kafka.clients.producer.internals.Sender - [Producer clientId=producer-1] Got error produce response with correlation id 293 on topic-partition ventas-raw-0, re
+[kafka-producer-network-thread | producer-1] WARN org.apache.kafka.clients.producer.internals.Sender - [Producer clientId=producer-1] Got error produce response with correlation id 294 on topic-partition ventas-raw-0, re
+
+################ [23:05:22] FASE 3 - Se vuelve a min.insync.replicas=1 (kafka-2 sigue caido) ################
+-- min.insync.replicas=1 aplicado a: ventas-raw ventas-agregadas ventas-raw-dlq
+
+### [23:05:46] Produccion reanudada: 106 ventas confirmadas en 15 s (los envios bloqueados se completan por reintento)
+-- ventas-streams: running, hilos de procesamiento vivos (Prometheus): 1
+
+################ [23:05:46] FASE 4 - Se reinicia kafka-2 (docker compose start kafka-2) ################
+ Container ventas-kafka-2 Started 
+
+### [23:06:12] kafka-2 healthy en 26 s
+
+### [23:06:17] ISR completo de nuevo 5 s despues de healthy (replica 2 se puso al dia copiando lo producido durante la caida)
+-- brokers en ZooKeeper: [1, 2]
+	Topic: ventas-agregadas	Partition: 0	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-agregadas	Partition: 1	Leader: 1	Replicas: 2,1	Isr: 1,2
+	Topic: ventas-agregadas	Partition: 2	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-raw	Partition: 0	Leader: 1	Replicas: 2,1	Isr: 1,2
+	Topic: ventas-raw	Partition: 1	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-raw	Partition: 2	Leader: 1	Replicas: 2,1	Isr: 1,2
+	Topic: ventas-raw-dlq	Partition: 0	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-raw-dlq	Partition: 1	Leader: 1	Replicas: 2,1	Isr: 1,2
+	Topic: ventas-raw-dlq	Partition: 2	Leader: 1	Replicas: 1,2	Isr: 1,2
+-- sub-replicadas:
+0
+-- bajo min ISR:
+0
+
+### [23:06:32] Lideres: tras el reinicio todos quedan en el broker 1. Eleccion de lider preferido para repartirlos:
+Successfully completed leader election (PREFERRED) for partitions __consumer_offsets-13, __transaction_state-13, __consumer_offsets-9, __transaction_state-17, __consumer_offsets-21, __transaction_state-5, __consumer_offsets-17, __transaction_state-9, ventas-aggregator-ventas-por-tienda-repartition-0, ventas-aggregator-por-eventid-repartition-2, __transaction_state-1, __consumer_offsets-5, ventas-raw-0, __consumer_offsets-1, __consumer_offsets-45, __transaction_state-45, __consumer_offsets-41, __transaction_state-49, ventas-aggregator-ventas-por-tienda-changelog-1, __transaction_state-37, __consumer_offsets-49, __transaction_state-41, __consumer_offsets-29, __transaction_state-29, __consumer_offsets-25, __transaction_state-33, ventas-aggregator-dedup-eventid-changelog-2, __consumer_offsets-37, __transaction_state-21, __consumer_offsets-33, __transaction_state-25, __consumer_offsets-15, __transaction_state-11, __consumer_offsets-11, __transaction_state-15, ventas-raw-dlq-1, __consumer_offsets-23, __transaction_state-3, __consumer_offsets-19, __transaction_state-7, ventas-agregadas-1, ventas-aggregator-suppress-ventanas-store-changelog-1, __consumer_offsets-7, ventas-aggregator-ventas-por-tienda-repartition-2, ventas-aggregator-por-eventid-repartition-0, __consumer_offsets-3, ventas-raw-2, __consumer_offsets-47, __transaction_state-43, ventas-aggregator-dedup-eventid-changelog-0, __consumer_offsets-43, __transaction_state-47, __transaction_state-35, __transaction_state-39, __consumer_offsets-31, __transaction_state-27, __consumer_offsets-27, __transaction_state-31, __consumer_offsets-39, __transaction_state-19, __consumer_offsets-35, __transaction_state-23
+	Topic: ventas-agregadas	Partition: 0	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-agregadas	Partition: 1	Leader: 2	Replicas: 2,1	Isr: 1,2
+	Topic: ventas-agregadas	Partition: 2	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-raw	Partition: 0	Leader: 2	Replicas: 2,1	Isr: 1,2
+	Topic: ventas-raw	Partition: 1	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-raw	Partition: 2	Leader: 2	Replicas: 2,1	Isr: 1,2
+	Topic: ventas-raw-dlq	Partition: 0	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-raw-dlq	Partition: 1	Leader: 2	Replicas: 2,1	Isr: 1,2
+	Topic: ventas-raw-dlq	Partition: 2	Leader: 1	Replicas: 1,2	Isr: 1,2
+
+################ [23:06:48] FASE 5 - Fin de la carga y conteo (sin perdida silenciosa) ################
+-- resumen del productor: producer detenido tras 609 eventos
+-- ventas confirmadas (acks=all) por el productor: 609
+-- mensajes nuevos en ventas-raw (offset final 609 - offset inicial 0): 609
+-- RESULTADO: coinciden -> ninguna venta confirmada se perdio y no hubo duplicados por reintentos (idempotencia)
+-- lag total de ventas-aggregator en ventas-raw: 0
+-- ventas-streams: running, hilos de procesamiento vivos (Prometheus): 1
+-- errores en ventas-streams durante la prueba:
+0
+
+# Fin 2026-11-21T23:06:58Z

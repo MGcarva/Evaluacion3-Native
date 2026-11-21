@@ -31,12 +31,12 @@ Ver diagrama en el [README §1](../README.md#1-arquitectura). Flujo: `ProducerAp
 
 | Escenario | Comando | Resultado esperado | Resultado obtenido (local) | Evidencia | AWS |
 |---|---|---|---|---|---|
-| Mensaje inválido | `docker compose run --rm generator invalidos` | App activa; DLQ con original, clave, tópico, causa; log correlacionable | 6/6 motivos correctos en DLQ; `correlationId` igual en log y DLQ; app `RUNNING` | 01, 05 | *pend.* |
-| Duplicado | `docker compose run --rm generator duplicados` | Conteo y monto no se duplican | 3 registros (offsets 27-29) → `sales_count=1`, `total_clp=3000`; 2 logs `duplicado ignorado` | 03, 05 | *pend.* |
-| Tardío | `docker compose run --rm generator tardios` | Dentro de gracia se suma; fuera se descarta y se detecta; no va a DLQ | Dentro: ventana 15:59 = 2000; fuera: `Skipping record for expired window`, `dropped-records` +1, 0 en DLQ | 04, 05 | *pend.* |
-| Broker detenido | `bash scripts/prueba-broker-caido.sh` | ISR degradado y recuperado; explicación de min ISR y RF | ISR 1,2→1→1,2; min ISR 1: 156 ventas en 20 s; min ISR 2: 0 en 25 s; ISR completo 2 s después de healthy; 475 confirmadas = 475 en tópico | 09 | *pend.* |
-| Reinicio consumidor | `bash scripts/prueba-reinicio-streams.sh` | Continuidad desde offsets y changelog; sin pérdida silenciosa | Lag 85→1 tras reiniciar; restauración completa desde changelog sin volumen; duplicado detectado tras ambos reinicios; 29/29 ventanas = ventas crudas (con gracia 30 s: 22 descartadas, ver §5.5) | 10, 10a | *pend.* |
-| Pruebas | `docker compose run --rm tests` | Todas pasan | 23/23 | 08 | *pend.* |
+| Mensaje inválido | `docker compose run --rm generator invalidos` | App activa; DLQ con original, clave, tópico, causa; log correlacionable | 6/6 motivos correctos en DLQ; `correlationId` igual en log y DLQ; app `RUNNING` | 01, 05 | ✅ 05-aws |
+| Duplicado | `docker compose run --rm generator duplicados` | Conteo y monto no se duplican | 3 registros (offsets 27-29) → `sales_count=1`, `total_clp=3000`; 2 logs `duplicado ignorado` | 03, 05 | ✅ 05-aws |
+| Tardío | `docker compose run --rm generator tardios` | Dentro de gracia se suma; fuera se descarta y se detecta; no va a DLQ | Dentro: ventana 15:59 = 2000; fuera: `Skipping record for expired window`, `dropped-records` +1, 0 en DLQ | 04, 05 | ✅ 05-aws |
+| Broker detenido | `bash scripts/prueba-broker-caido.sh` | ISR degradado y recuperado; explicación de min ISR y RF | ISR 1,2→1→1,2; min ISR 1: 156 ventas en 20 s; min ISR 2: 0 en 25 s; ISR completo 2 s después de healthy; 475 confirmadas = 475 en tópico | 09 | ✅ 609 = 609; min ISR 2 bloquea (09-aws) |
+| Reinicio consumidor | `bash scripts/prueba-reinicio-streams.sh` | Continuidad desde offsets y changelog; sin pérdida silenciosa | Lag 85→1 tras reiniciar; restauración completa desde changelog sin volumen; duplicado detectado tras ambos reinicios; 29/29 ventanas = ventas crudas (con gracia 30 s: 22 descartadas, ver §5.5) | 10, 10a | ✅ 27/27 (10-aws) |
+| Pruebas | `docker compose run --rm tests` | Todas pasan | 23/23 | 08 | ✅ 23/23 (08-aws) |
 
 ## 5. Hallazgos durante las pruebas
 
@@ -56,4 +56,8 @@ Runbook en el [README §11](../README.md#11-recuperación-runbook).
 
 ## 8. Despliegue en AWS
 
-*(Se completa tras la ejecución: tipo de instancia, región, tiempos, resultados de los escenarios y teardown — evidencias `*-aws`.)*
+- **Infraestructura**: una EC2 Ubuntu 24.04 en `us-east-1`, creada con los scripts `aws/00…04` (o `desplegar-aws.bat`). Security group solo a la IP del estudiante (/32), key pair fuera del repo, mismo `docker-compose.yaml` con `.env` propio (`PUBLIC_HOST` = IP pública).
+- **Límite de la cuenta**: solo se permite `t3.medium` (4 GB); `t3.large`, `t2.large` y `m5.large` dan `UnauthorizedOperation`. Se agregaron 2 GB de swap y heap de brokers de 384 MB. Consumo observado: 2,2 GB de RAM, swap sin uso (evidencia 11-aws).
+- **Resultados**: los cinco escenarios y las 23 pruebas se repitieron en AWS con los mismos resultados que en local (columna AWS de la matriz; capturas 12a-12e, 13-aws, 14).
+- **Hallazgos de la operación**: (a) al vencer la sesión del laboratorio, AWS elimina los recursos a mitad de una prueba (`ssh` código 255); los scripts idempotentes permitieron recrear todo con credenciales nuevas. (b) Windows PowerShell 5.1 antepone un BOM al stdin de `ssh`; se elimina antes de ejecutar los scripts remotos. (c) Un `.pem` en solo lectura impedía reemplazar la llave; `01-red-seguridad.ps1` ahora restaura permisos y verifica la escritura.
+- **Teardown**: `destruir-aws.bat` elimina la instancia, el disco, el security group y el key pair, y deja la verificación en `evidencias/15-teardown-aws.txt`.

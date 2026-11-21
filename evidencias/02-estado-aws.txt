@@ -1,0 +1,21 @@
+# Evidencia 02-estado-aws
+# Fecha (UTC): 2026-11-21T23:18:55Z
+# Entorno: aws
+
+$ ./scripts/kafka.sh estado
+
+
+=== Servicios ===
+NAME                    IMAGE                              COMMAND                  SERVICE          CREATED          STATUS                     PORTS
+ventas-grafana          grafana/grafana:11.3.1             "/run.sh"                grafana          17 minutes ago   Up 17 minutes              0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+ventas-jmx-agent        ventas-app                         "/__cacert_entrypoin…"   jmx-agent        17 minutes ago   Exited (0) 4 minutes ago   
+ventas-kafka-1          confluentinc/cp-kafka:7.6.14       "bash -c 'KAFKA_OPTS…"   kafka-1          17 minutes ago   Up 16 minutes (healthy)    0.0.0.0:9092->9092/tcp, [::]:9092->9092/tcp
+ventas-kafka-2          confluentinc/cp-kafka:7.6.14       "bash -c 'KAFKA_OPTS…"   kafka-2          17 minutes ago   Up 13 minutes (healthy)    9092/tcp, 0.0.0.0:9093->9093/tcp, [::]:9093->9093/tcp
+ventas-kafka-exporter   danielqsj/kafka-exporter:v1.8.0    "/bin/kafka_exporter…"   kafka-exporter   17 minutes ago   Up 16 minutes              9308/tcp
+ventas-kafka-init       confluentinc/cp-kafka:7.6.14       "/bin/bash -c 'set -…"   kafka-init       17 minutes ago   Exited (0) 4 minutes ago   
+ventas-prometheus       prom/prometheus:v2.55.1            "/bin/prometheus --c…"   prometheus       17 minutes ago   Up 17 minutes              0.0.0.0:9090->9090/tcp, [::]:9090->9090/tcp
+ventas-streams          ventas-app                         "/__cacert_entrypoin…"   streams          9 minutes ago    Up 9 minutes               
+ventas-zookeeper        confluentinc/cp-zookeeper:7.6.14   "bash -c 'KAFKA_OPTS…"   zookeeper        17 minutes ago   Up 17 minutes (healthy)    2181/tcp, 2888/tcp, 3888/tcp
+
+=== Brokers registrados en ZooKeeper ===
+[1, 2]

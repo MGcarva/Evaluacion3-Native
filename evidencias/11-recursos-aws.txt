@@ -1,0 +1,19 @@
+# Evidencia 11-recursos-aws
+# Fecha (UTC): 2026-11-21T23:20:06Z
+# Entorno: aws
+
+$ free -m; df -h /; docker stats --no-stream --format "table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}"
+
+               total        used        free      shared  buff/cache   available
+Mem:            3832        2216         412           3        1510        1615
+Swap:           2047           0        2047
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/root        29G   11G   18G  38% /
+NAME                    MEM USAGE / LIMIT     CPU %
+ventas-streams          169.8MiB / 3.742GiB   0.57%
+ventas-kafka-exporter   8.215MiB / 3.742GiB   0.00%
+ventas-kafka-1          459.6MiB / 3.742GiB   28.09%
+ventas-kafka-2          536.6MiB / 3.742GiB   7.61%
+ventas-zookeeper        185.8MiB / 3.742GiB   0.13%
+ventas-grafana          77.8MiB / 3.742GiB    0.76%
+ventas-prometheus       54.7MiB / 3.742GiB    0.12%

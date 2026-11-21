@@ -1,0 +1,93 @@
+# Evidencia 10 - Reinicio del consumidor Kafka Streams (indicador 6)
+# Fecha (UTC): 2026-11-21T23:07:00Z  Entorno: aws
+# Comando: bash scripts/prueba-reinicio-streams.sh
+
+################ [23:07:00] PREPARACION - carga continua + una venta marcada (para probar la deduplicacion tras cada reinicio) ################
+-- ventas-raw: lag total=1  offsets confirmados: p1=207 p2=217 p0=227
+
+################ [23:07:34] A) REINICIO CON ESTADO LOCAL (docker compose stop/start streams, volumen conservado) ################
+ Container ventas-streams Stopped 
+
+### [23:07:35] Streams detenido 20 s: el productor sigue escribiendo y el lag crece
+-- ventas-raw: lag total=75  offsets confirmados: p1=209 p2=217 p0=228
+ Container ventas-streams Started 
+-- ventas-streams en RUNNING tras 11 s
+
+### [23:08:23] Restauracion (con checkpoint local solo se lee lo que falta del changelog):
+      1   Finished restoring changelog ventas-aggregator-dedup-eventid-changelog-0 to store dedup-eventid with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-dedup-eventid-changelog-1 to store dedup-eventid with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-dedup-eventid-changelog-2 to store dedup-eventid with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-suppress-ventanas-store-changelog-0 to store suppress-ventanas-store with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-suppress-ventanas-store-changelog-1 to store suppress-ventanas-store with a total number of 271 records
+      1   Finished restoring changelog ventas-aggregator-suppress-ventanas-store-changelog-2 to store suppress-ventanas-store with a total number of 216 records
+      1   Finished restoring changelog ventas-aggregator-ventas-por-tienda-changelog-0 to store ventas-por-tienda with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-ventas-por-tienda-changelog-1 to store ventas-por-tienda with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-ventas-por-tienda-changelog-2 to store ventas-por-tienda with a total number of 0 records
+      1   Restoration in progress for 4 partitions
+
+### [23:08:33] Tras el reinicio el lag vuelve a ~0 (continua desde los offsets confirmados, sin saltarse mensajes)
+-- ventas-raw: lag total=4  offsets confirmados: p1=266 p2=288 p0=295
+
+### [23:08:37] Reenvio de la venta marcada reinicio-230700 -> debe ser duplicado (el estado de deduplicacion sobrevivio)
+  duplicado ignorado eventId=reinicio-230700 store=Prueba Reinicio 230700 eventTime=1795302517000 primerEventTime=1795302436000 origen=ventas-aggregator-por-eventid-repartition-0@452
+
+################ [23:08:44] B) REINICIO SIN ESTADO LOCAL (se elimina el contenedor y el volumen streams-state) ################
+ Container ventas-streams Removed 
+-- volumen eliminado: ventas-streaming_streams-state
+-- ventas-raw: lag total=48  offsets confirmados: p1=282 p2=294 p0=305
+ Container ventas-streams Started 
+-- ventas-streams en RUNNING tras 16 s
+
+### [23:09:30] Restauracion completa desde los topicos changelog (registros por store):
+      1   Finished restoring changelog ventas-aggregator-dedup-eventid-changelog-0 to store dedup-eventid with a total number of 330 records
+      1   Finished restoring changelog ventas-aggregator-dedup-eventid-changelog-1 to store dedup-eventid with a total number of 245 records
+      1   Finished restoring changelog ventas-aggregator-dedup-eventid-changelog-2 to store dedup-eventid with a total number of 303 records
+      1   Finished restoring changelog ventas-aggregator-suppress-ventanas-store-changelog-0 to store suppress-ventanas-store with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-suppress-ventanas-store-changelog-1 to store suppress-ventanas-store with a total number of 317 records
+      1   Finished restoring changelog ventas-aggregator-suppress-ventanas-store-changelog-2 to store suppress-ventanas-store with a total number of 249 records
+      1   Finished restoring changelog ventas-aggregator-ventas-por-tienda-changelog-0 to store ventas-por-tienda with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-ventas-por-tienda-changelog-1 to store ventas-por-tienda with a total number of 305 records
+      1   Finished restoring changelog ventas-aggregator-ventas-por-tienda-changelog-2 to store ventas-por-tienda with a total number of 240 records
+      1   Restoration in progress for 4 partitions
+-- ventas-raw: lag total=1  offsets confirmados: p1=351 p2=357 p0=360
+
+### [23:09:43] Reenvio de la venta marcada reinicio-230700 -> debe seguir siendo duplicado (estado reconstruido del changelog)
+  duplicado ignorado eventId=reinicio-230700 store=Prueba Reinicio 230700 eventTime=1795302583000 primerEventTime=1795302436000 origen=ventas-aggregator-por-eventid-repartition-0@548
+
+################ [23:09:53] C) EVENTO VIEJO JUSTO DESPUES DEL REINICIO (tiempo de stream tras reiniciar) ################
+
+### [23:09:53] Se envia una venta con eventTime de hace 5 min (2026-11-21T23:04:53Z); la gracia es 30 s
+-- RESULTADO: descartado como tardio (el tiempo de stream se conserva tras el reinicio)
+  Skipping record for expired window. topic=[ventas-aggregator-ventas-por-tienda-repartition] partition=[2] offset=[646] timestamp=[1795302293000] window=[1795302240000,1795302300000) expiration=[1795302476214] streamTime=[1795302596214]
+
+################ [23:10:01] CIERRE - se detiene la carga y se verifica la consistencia de las ventanas publicadas ################
+-- producer detenido tras 519 eventos
+
+### [23:10:03] Esperando 185 s (ventana 60s + gracia 120s + 5) para cerrar las ultimas ventanas; luego un empujador...
+-- ventas-raw: lag total=0  offsets confirmados: p1=379 p2=381 p0=392
+
+### [23:13:38] Verificacion: cada ventana publicada desde 2026-11-21T23:07:00Z vs. ventas crudas (validas, sin duplicados, por eventTime)
+Unable to find image 'python:3.12-alpine' locally
+3.12-alpine: Pulling from library/python
+cc36311dc778: Pulling fs layer
+881fc932939e: Pulling fs layer
+aa121b1b1cdb: Pulling fs layer
+113b91713f05: Pulling fs layer
+cc36311dc778: Download complete
+aa121b1b1cdb: Download complete
+881fc932939e: Download complete
+69d5cdcd015f: Download complete
+bfa9e4cb3258: Download complete
+113b91713f05: Download complete
+881fc932939e: Pull complete
+aa121b1b1cdb: Pull complete
+cc36311dc778: Pull complete
+113b91713f05: Pull complete
+Digest: sha256:c5ba3deef00c7758561a0f03c26f44f10589263d40e732b8748e0d1f38f6dd89
+Status: Downloaded newer image for python:3.12-alpine
+ventas-raw leidos=1152 validos=1152 duplicados_por_eventId=2
+ventanas publicadas desde 2026-11-21T23:07:00Z: 27  coinciden=27  difieren=0
+RESULTADO: OK - cada ventana publicada coincide con las ventas crudas
+-- errores en ventas-streams desde el ultimo arranque: 0
+
+# Fin 2026-11-21T23:14:17Z
