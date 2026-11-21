@@ -1,7 +1,7 @@
 # Informe y manual de ejecución — EP5 DSY1107
 
 **Streaming resiliente de ventas: integración, validación y recuperación con Kafka Streams**
-Autor: Gonzalo · Fecha: 2026-11-21 · Repositorio: *(enlace GitHub)*
+Autor: Gonzalo · Fecha: 2026-11-21 · Repositorio: <https://github.com/MGcarva/Evaluacion3-Native>
 
 > Manual completo de instalación y operación: [README](../README.md). Evidencias: [`evidencias/INDEX.md`](../evidencias/INDEX.md).
 
