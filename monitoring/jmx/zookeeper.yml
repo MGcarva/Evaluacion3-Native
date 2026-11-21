@@ -1,0 +1,9 @@
+# Reglas JMX -> Prometheus para ZooKeeper (nodo unico = punto unico de falla).
+lowercaseOutputName: true
+rules:
+  - pattern: 'org.apache.ZooKeeperService<name0=StandaloneServer_port(\d+)><>(\w+)'
+    name: zookeeper_$2
+    type: GAUGE
+  - pattern: 'org.apache.ZooKeeperService<name0=StandaloneServer_port(\d+), name1=InMemoryDataTree><>(\w+)'
+    name: zookeeper_inmemorydatatree_$2
+    type: GAUGE

@@ -1,0 +1,41 @@
+# Evidencia 08 - Pruebas automatizadas (indicador 7)
+# Fecha: 2026-11-21T17:06:05Z  Entorno: local (contenedor maven:3.9-eclipse-temurin-21)
+
+$ docker compose run --rm tests
+
+## cl.duoc.ventas.AppConfigTest  (tests=3, fallas=0, errores=0)
+  [OK ] La retencion de deduplicacion cubre al menos ventana + gracia
+  [OK ] Las variables de entorno sobreescriben los valores por defecto
+  [OK ] Valores por defecto documentados
+
+## cl.duoc.ventas.SaleValidatorTest  (tests=11, fallas=0, errores=0)
+  [OK ] Cada error de entrada tiene un motivo especifico vacio -> VALOR_VACIO
+  [OK ] Cada error de entrada tiene un motivo especifico malformado -> JSON_INVALIDO
+  [OK ] Cada error de entrada tiene un motivo especifico tipo-incorrecto -> JSON_INVALIDO
+  [OK ] Cada error de entrada tiene un motivo especifico sin-eventId -> CAMPO_OBLIGATORIO_AUSENTE: eventId
+  [OK ] Cada error de entrada tiene un motivo especifico sin-eventTime -> CAMPO_OBLIGATORIO_AUSENTE: eventTime
+  [OK ] Cada error de entrada tiene un motivo especifico eventTime-malo -> EVENTTIME_INVALIDO
+  [OK ] Cada error de entrada tiene un motivo especifico sin-store -> CAMPO_OBLIGATORIO_AUSENTE: store
+  [OK ] Cada error de entrada tiene un motivo especifico cantidad-cero -> CANTIDAD_INVALIDA
+  [OK ] Cada error de entrada tiene un motivo especifico precio-negativo -> PRECIO_INVALIDO
+  [OK ] Cada error de entrada tiene un motivo especifico total-incorrecto -> TOTAL_INCONSISTENTE: esperado=2000 recibido=5000
+  [OK ] Una venta correcta es valida y conserva el original
+
+## StreamsTopologyTest Agregacion por tienda y ventana  (tests=2, fallas=0, errores=0)
+  [OK ] Conteo, monto, ticket promedio e inicio/fin de ventana por tienda
+  [OK ] La ventana usa eventTime, no la hora de llegada
+
+## StreamsTopologyTest Validacion y DLQ  (tests=2, fallas=0, errores=0)
+  [OK ] Error de negocio (total incorrecto) va a la DLQ y el flujo sigue con los validos
+  [OK ] JSON malformado va a la DLQ con original, clave, topico fuente y motivo
+
+## StreamsTopologyTest Deduplicacion por eventId  (tests=3, fallas=0, errores=0)
+  [OK ] Pasada la retencion (10 min) el eventId se olvida: el estado no crece sin limite
+  [OK ] El mismo eventId enviado 3 veces (claves distintas) se cuenta una sola vez
+  [OK ] Ventas distintas con los mismos datos pero distinto eventId SI se cuentan
+
+## StreamsTopologyTest Eventos tardios y periodo de gracia  (tests=2, fallas=0, errores=0)
+  [OK ] Tardio DENTRO de la gracia se incorpora; FUERA de la gracia se descarta (no va a la DLQ)
+  [OK ] La ventana no se publica hasta que el reloj pasa fin + gracia (suppress)
+
+TOTAL: 23 pruebas, 0 fallas

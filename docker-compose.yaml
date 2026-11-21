@@ -1,0 +1,270 @@
+# =============================================================================
+# Streaming resiliente de ventas - DSY1107 EP5
+# Levantar todo:            docker compose up -d
+# Generar ventas normales:  docker compose run --rm producer
+# Casos de prueba:          docker compose run --rm generator [invalidos|duplicados|tardios|todos]
+# Kafka UI (opcional):      docker compose --profile ui up -d kafka-ui
+# Todos los valores se pueden cambiar en .env (ver .env.example).
+# =============================================================================
+
+# Configuracion compartida por la app Streams, el productor y el generador (AppConfig.java).
+x-app-env: &app-env
+  KAFKA_BOOTSTRAP: kafka-1:29092,kafka-2:29092
+  GROUP_ID: ${GROUP_ID:-ventas-aggregator}
+  RAW_TOPIC: ${RAW_TOPIC:-ventas-raw}
+  AGG_TOPIC: ${AGG_TOPIC:-ventas-agregadas}
+  DLQ_TOPIC: ${DLQ_TOPIC:-ventas-raw-dlq}
+  WINDOW_SECONDS: ${WINDOW_SECONDS:-60}
+  WINDOW_GRACE_SECONDS: ${WINDOW_GRACE_SECONDS:-120}
+  DEDUP_RETENTION_MINUTES: ${DEDUP_RETENTION_MINUTES:-10}
+  STREAMS_REPLICATION_FACTOR: ${TOPIC_REPLICATION_FACTOR:-2}
+  COMMIT_INTERVAL_MS: ${COMMIT_INTERVAL_MS:-1000}
+  STREAMS_STATE_DIR: /tmp/kafka-streams
+  PRODUCE_INTERVAL: ${PRODUCE_INTERVAL:-1.0}
+  PRODUCER_MAX_EVENTS: ${PRODUCER_MAX_EVENTS:-0}
+  CUSTOMER_POOL: ${CUSTOMER_POOL:-200}
+
+# Configuracion comun de los dos brokers (cada uno agrega su id y listeners).
+x-kafka-env: &kafka-env
+  KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+  KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+  KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"          # los topicos los crea kafka-init con config explicita
+  KAFKA_DEFAULT_REPLICATION_FACTOR: 2               # maximo posible con 2 brokers
+  KAFKA_MIN_INSYNC_REPLICAS: ${MIN_INSYNC_REPLICAS:-1}
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2         # __consumer_offsets replicado
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2 # __transaction_state (exactly_once_v2)
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1            # transacciones siguen con 1 broker caido
+  KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+  KAFKA_HEAP_OPTS: ${KAFKA_HEAP_OPTS:--Xms256m -Xmx512m}
+
+# Healthcheck de broker (KAFKA_OPTS vacio para no cargar el agente JMX en la herramienta)
+x-kafka-health: &kafka-health
+  test: ["CMD-SHELL", "KAFKA_OPTS= kafka-broker-api-versions --bootstrap-server localhost:29092 >/dev/null 2>&1"]
+  interval: 10s
+  timeout: 10s
+  retries: 12
+  start_period: 30s
+
+services:
+  # Copia el agente JMX exporter (incluido en la imagen ventas-app) a un volumen
+  # compartido con ZooKeeper y los brokers.
+  jmx-agent:
+    build: ./app
+    image: ventas-app
+    container_name: ventas-jmx-agent
+    restart: "no"
+    command: ["cp", "/opt/jmx/jmx_prometheus_javaagent.jar", "/jmx/"]
+    volumes:
+      - jmx-agent:/jmx
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.14
+    container_name: ventas-zookeeper
+    depends_on:
+      jmx-agent:
+        condition: service_completed_successfully
+    # El agente JMX se activa solo para el proceso del servidor (no en herramientas CLI)
+    command: ["bash", "-c", "KAFKA_OPTS='-javaagent:/opt/jmx/jmx_prometheus_javaagent.jar=7071:/opt/jmx-config/zookeeper.yml' exec /etc/confluent/docker/run"]
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_HEAP_OPTS: "-Xms128m -Xmx256m"
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-log:/var/lib/zookeeper/log
+      - jmx-agent:/opt/jmx:ro
+      - ./monitoring/jmx:/opt/jmx-config:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/2181'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  kafka-1:
+    image: confluentinc/cp-kafka:7.6.14
+    container_name: ventas-kafka-1
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    command: ["bash", "-c", "KAFKA_OPTS='-javaagent:/opt/jmx/jmx_prometheus_javaagent.jar=7071:/opt/jmx-config/kafka.yml' exec /etc/confluent/docker/run"]
+    ports:
+      - "9092:9092"
+    environment:
+      <<: *kafka-env
+      KAFKA_BROKER_ID: 1
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-1:29092,EXTERNAL://${PUBLIC_HOST:-localhost}:9092
+    volumes:
+      - kafka-1-data:/var/lib/kafka/data
+      - jmx-agent:/opt/jmx:ro
+      - ./monitoring/jmx:/opt/jmx-config:ro
+    healthcheck: *kafka-health
+
+  kafka-2:
+    image: confluentinc/cp-kafka:7.6.14
+    container_name: ventas-kafka-2
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    command: ["bash", "-c", "KAFKA_OPTS='-javaagent:/opt/jmx/jmx_prometheus_javaagent.jar=7071:/opt/jmx-config/kafka.yml' exec /etc/confluent/docker/run"]
+    ports:
+      - "9093:9093"
+    environment:
+      <<: *kafka-env
+      KAFKA_BROKER_ID: 2
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-2:29092,EXTERNAL://${PUBLIC_HOST:-localhost}:9093
+    volumes:
+      - kafka-2-data:/var/lib/kafka/data
+      - jmx-agent:/opt/jmx:ro
+      - ./monitoring/jmx:/opt/jmx-config:ro
+    healthcheck: *kafka-health
+
+  # Crea los topicos de forma idempotente (--if-not-exists) y termina.
+  # La app no arranca hasta que este servicio termina bien: no hay pasos manuales.
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.14
+    container_name: ventas-kafka-init
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        BS=kafka-1:29092,kafka-2:29092
+        crear() {
+          kafka-topics --bootstrap-server $$BS --create --if-not-exists --topic $$1 \
+            --partitions ${TOPIC_PARTITIONS:-3} --replication-factor ${TOPIC_REPLICATION_FACTOR:-2} \
+            --config retention.ms=$$2 --config min.insync.replicas=${MIN_INSYNC_REPLICAS:-1}
+        }
+        crear ${RAW_TOPIC:-ventas-raw}       ${RAW_RETENTION_MS:-604800000}
+        crear ${AGG_TOPIC:-ventas-agregadas} ${AGG_RETENTION_MS:-604800000}
+        crear ${DLQ_TOPIC:-ventas-raw-dlq}   ${DLQ_RETENTION_MS:-2592000000}
+        kafka-topics --bootstrap-server $$BS --describe --topic '${RAW_TOPIC:-ventas-raw}|${AGG_TOPIC:-ventas-agregadas}|${DLQ_TOPIC:-ventas-raw-dlq}'
+        echo "kafka-init: topicos listos"
+
+  # Aplicacion Kafka Streams: validacion + DLQ + deduplicacion + ventanas.
+  streams:
+    build: ./app
+    image: ventas-app
+    container_name: ventas-streams
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *app-env
+      JAVA_TOOL_OPTIONS: "-Xmx384m -javaagent:/opt/jmx/jmx_prometheus_javaagent.jar=7071:/opt/jmx-config/streams.yml"
+    volumes:
+      - streams-state:/tmp/kafka-streams   # estado local (RocksDB); sin el volumen se restaura del changelog
+      - ./monitoring/jmx:/opt/jmx-config:ro
+
+  # Productor de ventas validas (clave = customerId). Uso: docker compose run --rm producer
+  producer:
+    build: ./app
+    image: ventas-app
+    container_name: ventas-producer
+    profiles: ["tools"]
+    command: ["java", "-cp", "/app/app.jar", "cl.duoc.ventas.ProducerApp"]
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment: *app-env
+
+  # Generador de casos de prueba. Uso: docker compose run --rm generator [escenario]
+  generator:
+    build: ./app
+    image: ventas-app
+    profiles: ["tools"]
+    entrypoint: ["java", "-cp", "/app/app.jar", "cl.duoc.ventas.TestEventGenerator"]
+    command: ["todos"]
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *app-env
+      GENERATOR_WAIT: ${GENERATOR_WAIT:-true}
+
+  # Pruebas automatizadas (JUnit 5 + TopologyTestDriver) sin instalar Java ni Maven.
+  # Uso: docker compose run --rm tests      (reportes en app/target/surefire-reports)
+  tests:
+    image: maven:3.9-eclipse-temurin-21
+    profiles: ["tools"]
+    working_dir: /src
+    command: ["mvn", "-B", "test"]
+    volumes:
+      - ./app:/src
+      - maven-repo:/root/.m2
+
+  # ----------------------------- Monitoreo -----------------------------------
+  # Metricas de cluster via API de Kafka: brokers, ISR, sub-replicadas, offsets y lag.
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.8.0
+    container_name: ventas-kafka-exporter
+    command: ["--kafka.server=kafka-1:29092", "--kafka.server=kafka-2:29092", "--topic.filter=^[^_].*", "--group.filter=.*"]
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: ventas-prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=3d"]
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: ventas-grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"          # lectura sin login (rol Viewer) para la demo
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/ventas-streaming.json
+      GF_USERS_DEFAULT_THEME: light
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+
+  # Interfaz web opcional para inspeccionar topicos, mensajes y consumer groups.
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: ventas-kafka-ui
+    profiles: ["ui"]
+    ports:
+      - "${KAFKA_UI_PORT:-8080}:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: ventas
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:29092,kafka-2:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+
+volumes:
+  zookeeper-data:
+  zookeeper-log:
+  kafka-1-data:
+  kafka-2-data:
+  streams-state:
+  jmx-agent:
+  prometheus-data:
+  grafana-data:
+  maven-repo:

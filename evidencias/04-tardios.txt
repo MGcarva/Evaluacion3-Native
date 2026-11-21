@@ -1,0 +1,24 @@
+# Evidencia 04 - Ventanas por eventTime, gracia y eventos tardios (indicador 3)
+# Fecha: 2026-11-21T16:02:46Z  Entorno: local
+
+Kafka Streams config bootstrap=kafka-1:29092,kafka-2:29092 appId=ventas-aggregator raw=ventas-raw agg=ventas-agregadas dlq=ventas-raw-dlq ventana=60s gracia=30s dedupRetencion=10min rf=2 commitMs=1000 stateDir=/tmp/kafka-streams
+
+## Politica: ventana tumbling 60 s, gracia 30 s. Una ventana [s,e) se cierra cuando streamTime >= e + 30 s.
+## Envio (tienda 'Tienda Prueba Tardios', run=1795276806):
+normal=2026-11-21T16:00:06Z dentro=2026-11-21T15:59:51Z fuera=2026-11-21T15:57:06Z run=1795276806
+##   1) normal        eventTime=T0        total=1000 -> ventana 16:00-16:01
+##   2) dentro-gracia eventTime=T0-15s    total=2000 -> llega DESPUES de T0 (fuera de orden), ventana 15:59-16:00 sigue abierta hasta 16:00:30 -> SE INCORPORA
+##   3) fuera-gracia  eventTime=T0-180s   total=4000 -> ventana 15:57-15:58 expiro en 15:58:30 -> SE DESCARTA
+##   4) empujador tras 100 s para avanzar el reloj y cerrar las ventanas (suppress)
+
+## Log del descarte (WARN de Kafka Streams, con offset, ventana, expiracion y streamTime)
+$ docker logs ventas-streams 2>&1 | findstr "Skipping record for expired window"
+[ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1] WARN org.apache.kafka.streams.kstream.internals.KStreamWindowAggregate - Skipping record for expired window. topic=[ventas-aggregator-ventas-por-tienda-repartition] partition=[2] offset=[90] timestamp=[1795276626000] window=[1795276620000,1795276680000) expiration=[1795276776000] streamTime=[1795276806000]
+
+## Agregados publicados
+{"store":"Tienda Prueba Tardios","window_start":"2026-11-21T15:59:00Z","window_end":"2026-11-21T16:00:00Z","sales_count":1,"total_clp":2000,"avg_ticket_clp":2000}
+{"store":"Tienda Prueba Tardios","window_start":"2026-11-21T16:00:00Z","window_end":"2026-11-21T16:01:00Z","sales_count":1,"total_clp":1000,"avg_ticket_clp":1000}
+
+## El tardio NO es un dato invalido: no aparece en la DLQ
+$ kafka-console-consumer --topic ventas-raw-dlq --from-beginning | findstr fuera-gracia (cantidad)
+0

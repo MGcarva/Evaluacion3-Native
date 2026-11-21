@@ -1,0 +1,37 @@
+# Reglas JMX -> Prometheus para la app Kafka Streams (ventas-aggregator).
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+rules:
+  # Registros descartados por tarea (incluye tardios fuera de la gracia)
+  - pattern: 'kafka.streams<type=stream-task-metrics, thread-id=(.+), task-id=(.+)><>dropped-records-total'
+    name: kafka_streams_task_dropped_records_total
+    labels: { thread_id: "$1", task_id: "$2" }
+    type: COUNTER
+  # Duplicados de negocio ignorados (metrica propia de DeduplicadorPorEventId)
+  - pattern: 'kafka.streams<type=stream-dedup-metrics, thread-id=(.+), dedup-id=(.+)><>duplicados-ignorados-total'
+    name: kafka_streams_dedup_duplicados_ignorados_total
+    labels: { thread_id: "$1" }
+    type: COUNTER
+  # Throughput y commits del hilo
+  - pattern: 'kafka.streams<type=stream-thread-metrics, thread-id=(.+)><>(process-total|commit-total|poll-total)'
+    name: kafka_streams_thread_$2
+    labels: { thread_id: "$1" }
+    type: COUNTER
+  - pattern: 'kafka.streams<type=stream-thread-metrics, thread-id=(.+)><>(process-rate|commit-latency-avg)'
+    name: kafka_streams_thread_$2
+    labels: { thread_id: "$1" }
+    type: GAUGE
+  # Hilos vivos del cliente (0 = la app murio)
+  - pattern: 'kafka.streams<type=stream-metrics, client-id=(.+)><>alive-stream-threads'
+    name: kafka_streams_alive_stream_threads
+    labels: { client_id: "$1" }
+    type: GAUGE
+  # Lag visto por el consumidor interno de Streams
+  - pattern: 'kafka.consumer<type=consumer-fetch-manager-metrics, client-id=(.+), topic=(.+), partition=(.+)><>records-lag'
+    name: kafka_streams_consumer_records_lag
+    labels: { client_id: "$1", topic: "$2", partition: "$3" }
+    type: GAUGE
+  # Restauracion de estado (changelog) al arrancar
+  - pattern: 'kafka.consumer<type=consumer-fetch-manager-metrics, client-id=(.+restore-consumer)><>records-consumed-total'
+    name: kafka_streams_restore_records_consumed_total
+    type: COUNTER

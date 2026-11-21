@@ -1,0 +1,14 @@
+# Secretos y configuracion local
+.env
+*.pem
+aws/estado.json
+
+# Compilacion
+target/
+
+# Herramientas del editor
+.github/modernize/
+.vscode/
+aws/.no-usar-*
+__pycache__/
+aws/credenciales.txt

@@ -1,0 +1,57 @@
+# Evidencia 05 - Generador reproducible de casos (req. 6) y metricas en Prometheus (ind. 6)
+# Fecha: 2026-11-21T16:20:42Z  Entorno: local
+
+$ docker compose run --rm generator todos
+== Generador de casos: escenario=todos run=161739 topico=ventas-raw ventana=60s gracia=30s
+-- INVALIDOS -> deben ir a ventas-raw-dlq con su motivo; la app sigue activa
+  [invalido-malformado   ] clave=inv-161739-json        -> ventas-raw-1@51 | esperado: JSON_INVALIDO
+  [invalido-vacio        ] clave=inv-161739-vacio       -> ventas-raw-2@43 | esperado: VALOR_VACIO
+  [invalido-sin-store    ] clave=inv-161739-sin-store   -> ventas-raw-2@44 | esperado: CAMPO_OBLIGATORIO_AUSENTE: store
+  [invalido-eventtime    ] clave=inv-161739-fecha       -> ventas-raw-1@52 | esperado: EVENTTIME_INVALIDO
+  [invalido-cantidad     ] clave=inv-161739-cantidad    -> ventas-raw-2@45 | esperado: CANTIDAD_INVALIDA
+  [invalido-total        ] clave=inv-161739-total       -> ventas-raw-0@34 | esperado: TOTAL_INCONSISTENTE: esperado=2000 recibido=5000
+-- DUPLICADOS -> misma venta 3 veces; 'Prueba Duplicados 161739' debe contar 1 venta de 3000
+  [duplicado-original    ] clave=cliente-A              -> ventas-raw-0@35 | esperado: se cuenta
+  [duplicado-copia-1     ] clave=cliente-B              -> ventas-raw-0@36 | esperado: log 'duplicado ignorado'
+  [duplicado-copia-2     ] clave=cliente-C              -> ventas-raw-0@37 | esperado: log 'duplicado ignorado'
+-- TARDIOS -> tienda 'Prueba Tardios 161739' T0=2026-11-21T16:18:05Z
+  [tardio-normal         ] clave=cliente-tardio         -> ventas-raw-0@38 | esperado: ventana 2026-11-21T16:18:00Z-2026-11-21T16:19:00Z (avanza el reloj a T0)
+  [tardio-dentro-gracia  ] clave=cliente-tardio         -> ventas-raw-0@39 | esperado: fuera de orden pero DENTRO de la gracia -> se suma a ventana 2026-11-21T16:17:00Z-2026-11-21T16:18:00Z
+  [tardio-fuera-gracia   ] clave=cliente-tardio         -> ventas-raw-0@40 | esperado: FUERA de la gracia -> descartado (log 'Skipping record for expired window', NO va a DLQ)
+-- Esperando 95 s para que cierren las ventanas (ventana + gracia + 5 s)...
+  [empujador             ] clave=cliente-empujador      -> ventas-raw-1@53 | esperado: avanza el reloj de 'Prueba Duplicados 161739' para que suppress publique
+  [empujador             ] clave=cliente-empujador      -> ventas-raw-1@54 | esperado: avanza el reloj de 'Prueba Tardios 161739' para que suppress publique
+== Fin. Verificar con: scripts/kafka.ps1 dlq | agregadas | logs
+
+## DLQ: clave -> motivo (run 161739)
+inv-161739-vacio -> VALOR_VACIO
+inv-161739-sin-store -> CAMPO_OBLIGATORIO_AUSENTE: store
+inv-161739-cantidad -> CANTIDAD_INVALIDA: 0
+inv-161739-total -> TOTAL_INCONSISTENTE: esperado=2000 recibido=5000
+inv-161739-json -> JSON_INVALIDO: JsonEOFException
+inv-161739-fecha -> EVENTTIME_INVALIDO: ayer a las 10
+
+## Agregados de las tiendas de prueba
+{"store":"Prueba Duplicados 161739","window_start":"2026-11-21T16:17:00Z","window_end":"2026-11-21T16:18:00Z","sales_count":1,"total_clp":3000,"avg_ticket_clp":3000}
+{"store":"Prueba Tardios 161739","window_start":"2026-11-21T16:17:00Z","window_end":"2026-11-21T16:18:00Z","sales_count":1,"total_clp":2000,"avg_ticket_clp":2000}
+{"store":"Prueba Tardios 161739","window_start":"2026-11-21T16:18:00Z","window_end":"2026-11-21T16:19:00Z","sales_count":1,"total_clp":1000,"avg_ticket_clp":1000}
+
+## Logs de duplicados y descartes
+[ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1] INFO cl.duoc.ventas.DeduplicadorPorEventId - duplicado ignorado eventId=dup-161739 store=Prueba Duplicados 161739 eventTime=1795277859000 primerEventTime=1795277859000 origen=ventas-aggregator-por-eventid-repartition-1@13
+[ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1] INFO cl.duoc.ventas.DeduplicadorPorEventId - duplicado ignorado eventId=dup-161739 store=Prueba Duplicados 161739 eventTime=1795277859000 primerEventTime=1795277859000 origen=ventas-aggregator-por-eventid-repartition-1@14
+[ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1] WARN org.apache.kafka.streams.kstream.internals.KStreamWindowAggregate - Skipping record for expired window. topic=[ventas-aggregator-ventas-por-tienda-repartition] partition=[2] offset=[98] timestamp=[1795277705000] window=[1795277700000,1795277760000) expiration=[1795277855000] streamTime=[1795277885000]
+
+## Prometheus: estado de los targets
+kafka-brokers http://kafka-1:7071/metrics up
+kafka-brokers http://kafka-2:7071/metrics up
+kafka-exporter http://kafka-exporter:9308/metrics up
+kafka-streams http://streams:7071/metrics up
+prometheus http://localhost:9090/metrics up
+zookeeper http://zookeeper:7071/metrics up
+
+## Prometheus: metricas clave
+kafka_brokers = 2
+sum(kafka_topic_partition_under_replicated_partition) = 0
+sum(kafka_streams_task_dropped_records_total) = 1
+sum(kafka_streams_dedup_duplicados_ignorados_total) = 2
+sum(kafka_streams_alive_stream_threads) = 1

@@ -1,0 +1,28 @@
+# Evidencia 03 - Deduplicacion por eventId (indicador 5)
+# Fecha: 2026-11-21T15:54:38Z  Entorno: local
+
+## Version que corre
+sha256:fb19dac220da2c0fabbeea631d67e90f05de1d99d7d6c52256ae26cf76c464a0
+Kafka Streams config bootstrap=kafka-1:29092,kafka-2:29092 appId=ventas-aggregator raw=ventas-raw agg=ventas-agregadas dlq=ventas-raw-dlq ventana=60s gracia=30s dedupRetencion=10min rf=2 commitMs=1000 stateDir=/tmp/kafka-streams
+
+## Prueba: misma venta (dedup-1795276343) enviada 3 veces con claves cliente-A, cliente-B, cliente-C;
+## espera de 100 s (ventana 60 s + gracia 30 s) y un evento 'empujador' de la misma tienda para cerrar la ventana.
+
+## 1) Las 3 copias SI estan en ventas-raw: son 3 registros distintos para Kafka (particion/offset distintos)
+$ kafka-console-consumer --topic ventas-raw --from-beginning --property print.partition=true --property print.offset=true --property print.key=true | findstr dedup-1795276343
+Partition:0	Offset:27	cliente-A	{"eventId":"dedup-1795276343","eventTime":"2026-11-21T15:52:23Z","store":"Tienda Prueba 
+Partition:0	Offset:28	cliente-B	{"eventId":"dedup-1795276343","eventTime":"2026-11-21T15:52:23Z","store":"Tienda Prueba 
+Partition:0	Offset:29	cliente-C	{"eventId":"dedup-1795276343","eventTime":"2026-11-21T15:52:23Z","store":"Tienda Prueba 
+
+## 2) El deduplicador ignora 2 copias (log con origen topico-particion@offset del repartition por eventId)
+$ docker logs ventas-streams 2>&1 | findstr "duplicado ignorado"
+[ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1] INFO cl.duoc.ventas.DeduplicadorPorEventId - duplicado ignorado eventId=dedup-1795276343 store=Tienda Prueba Dedup eventTime=1795276343000 primerEventTime=1795276343000 origen=ventas-aggregator-por-eventid-repartition-1@1
+[ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1] INFO cl.duoc.ventas.DeduplicadorPorEventId - duplicado ignorado eventId=dedup-1795276343 store=Tienda Prueba Dedup eventTime=1795276343000 primerEventTime=1795276343000 origen=ventas-aggregator-por-eventid-repartition-1@2
+
+## 3) El agregado cuenta la venta UNA vez
+$ kafka-console-consumer --topic ventas-agregadas --from-beginning --isolation-level read_committed | findstr "Tienda Prueba Dedup"
+{"store":"Tienda Prueba Dedup","window_start":"2026-11-21T15:52:00Z","window_end":"2026-11-21T15:53:00Z","sales_count":1,"total_clp":3000,"avg_ticket_clp":3000}
+
+## 4) Topicos internos creados por la deduplicacion (estado con changelog => sobrevive reinicios)
+Topic: ventas-aggregator-dedup-eventid-changelog	TopicId: czbOL_gHSPWdal1-WMex0A	PartitionCount: 3	ReplicationFactor: 2	Configs: min.insync.replicas=1,cleanup.policy=compact,message.timestamp.type=CreateTime
+Topic: ventas-aggregator-por-eventid-repartition	TopicId: 8bhZjKcxQeO3-azVLR_3aQ	PartitionCount: 3	ReplicationFactor: 2	Configs: min.insync.replicas=1,cleanup.policy=delete,segment.bytes=52428800,retention.ms=-1,message.timestamp.type=CreateTime

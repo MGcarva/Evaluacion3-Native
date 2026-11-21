@@ -1,0 +1,96 @@
+# Evidencia 10 - Reinicio del consumidor Kafka Streams (indicador 6)
+# Fecha (UTC): 2026-11-21T16:40:15Z  Entorno: local
+# Comando: bash scripts/prueba-reinicio-streams.sh
+
+################ [16:40:15] PREPARACION - carga continua + una venta marcada (para probar la deduplicacion tras cada reinicio) ################
+-- ventas-raw: lag total=3  offsets confirmados: p1=411 p2=404 p0=456
+
+################ [16:40:51] A) REINICIO CON ESTADO LOCAL (docker compose stop/start streams, volumen conservado) ################
+ Container ventas-streams Stopped 
+
+### [16:40:52] Streams detenido 20 s: el productor sigue escribiendo y el lag crece
+-- ventas-raw: lag total=74  offsets confirmados: p1=414 p2=407 p0=456
+ Container ventas-streams Started 
+-- ventas-streams en RUNNING tras 12 s
+
+### [16:41:38] Restauracion (con checkpoint local solo se lee lo que falta del changelog):
+      1   Finished restoring changelog ventas-aggregator-dedup-eventid-changelog-0 to store dedup-eventid with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-dedup-eventid-changelog-1 to store dedup-eventid with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-dedup-eventid-changelog-2 to store dedup-eventid with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-suppress-ventanas-store-changelog-0 to store suppress-ventanas-store with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-suppress-ventanas-store-changelog-1 to store suppress-ventanas-store with a total number of 425 records
+      1   Finished restoring changelog ventas-aggregator-suppress-ventanas-store-changelog-2 to store suppress-ventanas-store with a total number of 319 records
+      1   Finished restoring changelog ventas-aggregator-ventas-por-tienda-changelog-0 to store ventas-por-tienda with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-ventas-por-tienda-changelog-1 to store ventas-por-tienda with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-ventas-por-tienda-changelog-2 to store ventas-por-tienda with a total number of 0 records
+      1   Restoration in progress for 1 partitions
+
+### [16:41:49] Tras el reinicio el lag vuelve a ~0 (continua desde los offsets confirmados, sin saltarse mensajes)
+-- ventas-raw: lag total=1  offsets confirmados: p1=476 p2=466 p0=526
+
+### [16:41:51] Reenvio de la venta marcada reinicio-164015 -> debe ser duplicado (el estado de deduplicacion sobrevivio)
+  duplicado ignorado eventId=reinicio-164015 store=Prueba Reinicio 164015 eventTime=1795279311000 primerEventTime=1795279235000 origen=ventas-aggregator-por-eventid-repartition-0@610
+
+################ [16:41:58] B) REINICIO SIN ESTADO LOCAL (se elimina el contenedor y el volumen streams-state) ################
+ Container ventas-streams Removed 
+-- volumen eliminado: ventas-streaming_streams-state
+-- ventas-raw: lag total=48  offsets confirmados: p1=485 p2=477 p0=539
+ Container ventas-streams Started 
+-- ventas-streams en RUNNING tras 22 s
+
+### [16:42:48] Restauracion completa desde los topicos changelog (registros por store):
+      1   Finished restoring changelog ventas-aggregator-dedup-eventid-changelog-0 to store dedup-eventid with a total number of 567 records
+      1   Finished restoring changelog ventas-aggregator-dedup-eventid-changelog-1 to store dedup-eventid with a total number of 565 records
+      1   Finished restoring changelog ventas-aggregator-dedup-eventid-changelog-2 to store dedup-eventid with a total number of 577 records
+      1   Finished restoring changelog ventas-aggregator-suppress-ventanas-store-changelog-0 to store suppress-ventanas-store with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-suppress-ventanas-store-changelog-1 to store suppress-ventanas-store with a total number of 474 records
+      1   Finished restoring changelog ventas-aggregator-suppress-ventanas-store-changelog-2 to store suppress-ventanas-store with a total number of 352 records
+      1   Finished restoring changelog ventas-aggregator-ventas-por-tienda-changelog-0 to store ventas-por-tienda with a total number of 0 records
+      1   Finished restoring changelog ventas-aggregator-ventas-por-tienda-changelog-1 to store ventas-por-tienda with a total number of 509 records
+      1   Finished restoring changelog ventas-aggregator-ventas-por-tienda-changelog-2 to store ventas-por-tienda with a total number of 365 records
+      1   Restoration in progress for 4 partitions
+-- ventas-raw: lag total=2  offsets confirmados: p1=546 p2=535 p0=614
+
+### [16:43:01] Reenvio de la venta marcada reinicio-164015 -> debe seguir siendo duplicado (estado reconstruido del changelog)
+  duplicado ignorado eventId=reinicio-164015 store=Prueba Reinicio 164015 eventTime=1795279381000 primerEventTime=1795279235000 origen=ventas-aggregator-por-eventid-repartition-0@714
+
+################ [16:43:09] C) EVENTO VIEJO JUSTO DESPUES DEL REINICIO (tiempo de stream tras reiniciar) ################
+
+### [16:43:09] Se envia una venta con eventTime de hace 5 min (2026-11-21T16:38:09Z); la gracia es 30 s
+-- RESULTADO: descartado como tardio (el tiempo de stream se conserva tras el reinicio)
+  Skipping record for expired window. topic=[ventas-aggregator-ventas-por-tienda-repartition] partition=[1] offset=[1284] timestamp=[1795279089000] window=[1795279080000,1795279140000) expiration=[1795279360848] streamTime=[1795279390848]
+
+################ [16:43:17] CIERRE - se detiene la carga y se verifica la consistencia de las ventanas publicadas ################
+-- producer detenido tras 516 eventos
+
+### [16:43:18] Esperando que cierren las ultimas ventanas (ventana + gracia) con un evento empujador...
+-- ventas-raw: lag total=0  offsets confirmados: p1=577 p2=553 p0=640
+
+### [16:45:23] Verificacion: cada ventana publicada desde 2026-11-21T16:40:00Z vs. ventas crudas (validas, sin duplicados, por eventTime)
+ventas-raw leidos=1770 validos=1758 duplicados_por_eventId=6
+ventanas publicadas desde 2026-11-21T16:40:00Z: 29  coinciden=22  difieren=7
+  DIFIERE Falabella Plaza Oeste 2026-11-21T16:40:00Z: esperado(conteo,monto)=(12, 303485) publicado=(10, 209218)
+  DIFIERE Paris Costanera Center 2026-11-21T16:40:00Z: esperado(conteo,monto)=(6, 83082) publicado=(5, 60417)
+  DIFIERE Paris Marina Arauco 2026-11-21T16:40:00Z: esperado(conteo,monto)=(6, 222029) publicado=(3, 57231)
+  DIFIERE Falabella Costanera Center 2026-11-21T16:40:00Z: esperado(conteo,monto)=(10, 371651) publicado=(6, 133889)
+  DIFIERE Falabella Online 2026-11-21T16:40:00Z: esperado(conteo,monto)=(13, 799141) publicado=(8, 312715)
+  DIFIERE Paris Online 2026-11-21T16:40:00Z: esperado(conteo,monto)=(14, 425161) publicado=(11, 247578)
+  DIFIERE Paris Plaza Vespucio 2026-11-21T16:40:00Z: esperado(conteo,monto)=(11, 531613) publicado=(7, 266577)
+RESULTADO: REVISAR
+-- errores en ventas-streams desde el ultimo arranque: 0
+
+# Fin 2026-11-21T16:46:14Z
+
+## ANALISIS DEL HALLAZGO (gracia = 30 s)
+Las 7 ventanas de 16:40 publicaron 22 ventas menos que las crudas. Prometheus registro en la instancia
+de la fase A:  sum(kafka_streams_task_dropped_records_total) = 22  (consulta a las 16:41:50 UTC),
+exactamente la diferencia (2+1+3+4+5+3+4 = 22).
+Causa: con Streams detenido ~35 s se acumulo atraso en las 3 particiones de ventas-raw. Al reanudar, cada
+tarea proceso su atraso por separado; una particion adelanto el tiempo de stream de la tarea de agregacion
+(despues del repartition por tienda) hasta 16:41:3x y luego llegaron ventas de 16:40:5x desde otra
+particion: la ventana 16:40 ya habia cerrado (fin 16:41:00 + gracia 30 s) y se descartaron como tardias.
+No fue silencioso (log "Skipping record for expired window" y metrica dropped-records), pero si hubo
+perdida en el agregado.
+Decision: la gracia debe cubrir tambien el reordenamiento tras una caida del consumidor, no solo el
+desfase del productor. Se sube WINDOW_GRACE_SECONDS a 120 s (cubre caidas de ~2 min; latencia de
+publicacion = ventana + gracia = 3 min). Ver evidencia 10 (repeticion con gracia 120 s).

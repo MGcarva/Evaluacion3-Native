@@ -1,0 +1,46 @@
+# Evidencia 02 - Configuracion centralizada y topicos automaticos (indicador 1)
+# Fecha: 2026-11-21T15:48:06Z  Entorno: local
+
+$ docker compose up -d
+
+## Estado de los servicios
+$ docker compose ps -a
+NAME                STATUS
+ventas-kafka-1      Up 3 hours (healthy)
+ventas-kafka-2      Up 3 hours (healthy)
+ventas-kafka-init   Exited (0) 12 seconds ago
+ventas-streams      Up About a minute
+ventas-zookeeper    Up 3 hours (healthy)
+
+## kafka-init: creacion idempotente de topicos
+$ docker logs ventas-kafka-init
+Topic: ventas-agregadas	TopicId: KayRjka4SkKrLYEx1yErkw	PartitionCount: 3	ReplicationFactor: 2	Configs: min.insync.replicas=1,retention.ms=604800000
+	Topic: ventas-agregadas	Partition: 0	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-agregadas	Partition: 1	Leader: 2	Replicas: 2,1	Isr: 2,1
+	Topic: ventas-agregadas	Partition: 2	Leader: 1	Replicas: 1,2	Isr: 1,2
+Topic: ventas-raw	TopicId: 3uXDWBrkQd-lPtHqFm6A8g	PartitionCount: 3	ReplicationFactor: 2	Configs: min.insync.replicas=1,retention.ms=604800000
+	Topic: ventas-raw	Partition: 0	Leader: 2	Replicas: 2,1	Isr: 2,1
+	Topic: ventas-raw	Partition: 1	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-raw	Partition: 2	Leader: 2	Replicas: 2,1	Isr: 2,1
+Topic: ventas-raw-dlq	TopicId: qB6h2FkXSjGSinYzKhB_NA	PartitionCount: 3	ReplicationFactor: 2	Configs: min.insync.replicas=1,retention.ms=2592000000
+	Topic: ventas-raw-dlq	Partition: 0	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-raw-dlq	Partition: 1	Leader: 2	Replicas: 2,1	Isr: 2,1
+	Topic: ventas-raw-dlq	Partition: 2	Leader: 1	Replicas: 1,2	Isr: 1,2
+kafka-init: topicos listos
+Topic: ventas-agregadas	TopicId: KayRjka4SkKrLYEx1yErkw	PartitionCount: 3	ReplicationFactor: 2	Configs: min.insync.replicas=1,retention.ms=604800000
+	Topic: ventas-agregadas	Partition: 0	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-agregadas	Partition: 1	Leader: 2	Replicas: 2,1	Isr: 2,1
+	Topic: ventas-agregadas	Partition: 2	Leader: 1	Replicas: 1,2	Isr: 1,2
+Topic: ventas-raw	TopicId: 3uXDWBrkQd-lPtHqFm6A8g	PartitionCount: 3	ReplicationFactor: 2	Configs: min.insync.replicas=1,retention.ms=604800000
+	Topic: ventas-raw	Partition: 0	Leader: 2	Replicas: 2,1	Isr: 2,1
+	Topic: ventas-raw	Partition: 1	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-raw	Partition: 2	Leader: 2	Replicas: 2,1	Isr: 2,1
+Topic: ventas-raw-dlq	TopicId: qB6h2FkXSjGSinYzKhB_NA	PartitionCount: 3	ReplicationFactor: 2	Configs: min.insync.replicas=1,retention.ms=2592000000
+	Topic: ventas-raw-dlq	Partition: 0	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: ventas-raw-dlq	Partition: 1	Leader: 2	Replicas: 2,1	Isr: 2,1
+	Topic: ventas-raw-dlq	Partition: 2	Leader: 1	Replicas: 1,2	Isr: 1,2
+kafka-init: topicos listos
+
+## Linea de arranque de Streams (version y configuracion efectiva)
+$ docker logs ventas-streams 2>&1 | findstr "Kafka Streams config"
+Kafka Streams config bootstrap=kafka-1:29092,kafka-2:29092 appId=ventas-aggregator raw=ventas-raw agg=ventas-agregadas dlq=ventas-raw-dlq ventana=60s gracia=30s dedupRetencion=10min rf=2 commitMs=1000 stateDir=/tmp/kafka-streams

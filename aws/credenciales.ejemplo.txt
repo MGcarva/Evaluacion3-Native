@@ -1,0 +1,7 @@
+# 1) Copia este archivo como credenciales.txt (en esta misma carpeta aws\).
+# 2) En el laboratorio de AWS Academy: "AWS Details" > "AWS CLI: Show" y pega aqui el bloque completo.
+# 3) credenciales.txt esta en .gitignore: NUNCA se sube al repositorio.
+[default]
+aws_access_key_id=PEGAR_AQUI
+aws_secret_access_key=PEGAR_AQUI
+aws_session_token=PEGAR_AQUI

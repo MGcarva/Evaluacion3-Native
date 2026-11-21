@@ -1,0 +1,25 @@
+# Reglas JMX -> Prometheus para los brokers (agente en el puerto 7071 de cada broker).
+# Solo se exportan las metricas que usa el dashboard + JVM (heap, GC) que el agente agrega solo.
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+rules:
+  # Mensajes/bytes de entrada y salida por topico (BrokerTopicMetrics ...PerSec)
+  - pattern: kafka.server<type=BrokerTopicMetrics, name=(MessagesIn|BytesIn|BytesOut)PerSec, topic=(.+)><>Count
+    name: kafka_server_brokertopicmetrics_$1_total
+    labels: { topic: "$2" }
+    type: COUNTER
+  # Replicacion: particiones sub-replicadas, bajo min ISR, lideres, encogimiento/expansion de ISR
+  - pattern: kafka.server<type=ReplicaManager, name=(UnderReplicatedPartitions|UnderMinIsrPartitionCount|AtMinIsrPartitionCount|PartitionCount|LeaderCount|OfflineReplicaCount)><>Value
+    name: kafka_server_replicamanager_$1
+    type: GAUGE
+  - pattern: kafka.server<type=ReplicaManager, name=(IsrShrinks|IsrExpands)PerSec><>Count
+    name: kafka_server_replicamanager_$1_total
+    type: COUNTER
+  # Controlador: quien es el controller y particiones sin lider
+  - pattern: kafka.controller<type=KafkaController, name=(ActiveControllerCount|OfflinePartitionsCount)><>Value
+    name: kafka_controller_kafkacontroller_$1
+    type: GAUGE
+  # Rechazos de produccion por falta de ISR (min.insync.replicas)
+  - pattern: kafka.server<type=BrokerTopicMetrics, name=(FailedProduceRequests|ProduceMessageConversions)PerSec><>Count
+    name: kafka_server_brokertopicmetrics_$1_total
+    type: COUNTER

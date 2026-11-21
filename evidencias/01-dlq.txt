@@ -1,0 +1,28 @@
+# Evidencia 01 - Validacion y DLQ (indicador 4)
+# Fecha: 2026-11-21T15:41:13Z  Entorno: local
+
+## Version que corre
+$ docker inspect ventas-streams --format '{{.Image}}'
+sha256:95094d6825fbf189b35af73a779a6c36c0b86f7f434c10c42c22eca3037d396d
+Kafka Streams app=ventas-aggregator raw=ventas-raw agg=ventas-agregadas dlq=ventas-raw-dlq ventana=60s gracia=0s
+
+## Eventos enviados a ventas-raw (clave|valor)
+test-roto|{"eventId":"bad-001","eventTime":"2026-11-21T10:00:00Z","store":
+test-sin-store|{... sin campo store ...}
+test-total|{... quantity=2, unitPriceClp=1000, totalClp=5000 ...}
+
+## Log de la app
+$ docker logs ventas-streams 2>&1 | findstr "evento rechazado"
+[ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1] WARN cl.duoc.ventas.StreamsApp - evento rechazado correlationId=c7ad7424-4f5e-4799-b3ee-c57c7617c3a6 topico=ventas-raw clave=test-total motivo=TOTAL_INCONSISTENTE: esperado=2000 recibido=5000
+[ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1] WARN cl.duoc.ventas.StreamsApp - evento rechazado correlationId=ae837ae2-d834-4680-8ea5-b5e2738992d1 topico=ventas-raw clave=test-roto motivo=JSON_INVALIDO: JsonEOFException
+[ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1] WARN cl.duoc.ventas.StreamsApp - evento rechazado correlationId=ec53d1cf-0449-46fb-96a6-5934d71f056a topico=ventas-raw clave=test-sin-store motivo=CAMPO_OBLIGATORIO_AUSENTE: store
+
+## Contenido de ventas-raw-dlq
+$ docker exec ventas-kafka-1 kafka-console-consumer --bootstrap-server kafka-1:29092 --topic ventas-raw-dlq --from-beginning --property print.key=true --property print.partition=true --isolation-level read_committed --timeout-ms 8000
+Partition:2	test-roto	{"correlationId":"ae837ae2-d834-4680-8ea5-b5e2738992d1","sourceTopic":"ventas-raw","key":"test-roto","originalValue":"{\"eventId\":\"bad-001\",\"eventTime\":\"2026-11-21T10:00:00Z\",\"store\":","reason":"JSON_INVALIDO: JsonEOFException","detectedAt":"2026-11-21T15:40:41.555892052Z"}
+Partition:2	test-sin-store	{"correlationId":"ec53d1cf-0449-46fb-96a6-5934d71f056a","sourceTopic":"ventas-raw","key":"test-sin-store","originalValue":"{\"eventId\":\"bad-002\",\"eventTime\":\"2026-11-21T10:00:00Z\",\"storeFormat\":\"express\",\"city\":\"Santiago\",\"channel\":\"pos\",\"category\":\"bebidas\",\"product\":\"agua\",\"quantity\":1,\"unitPriceClp\":1000,\"totalClp\":1000,\"customerId\":\"test-sin-store\",\"paymentMethod\":\"debito\"}","reason":"CAMPO_OBLIGATORIO_AUSENTE: store","detectedAt":"2026-11-21T15:40:41.557293888Z"}
+Partition:1	test-total	{"correlationId":"c7ad7424-4f5e-4799-b3ee-c57c7617c3a6","sourceTopic":"ventas-raw","key":"test-total","originalValue":"{\"eventId\":\"bad-003\",\"eventTime\":\"2026-11-21T10:00:00Z\",\"store\":\"S01\",\"storeFormat\":\"express\",\"city\":\"Santiago\",\"channel\":\"pos\",\"category\":\"bebidas\",\"product\":\"agua\",\"quantity\":2,\"unitPriceClp\":1000,\"totalClp\":5000,\"customerId\":\"test-total\",\"paymentMethod\":\"debito\"}","reason":"TOTAL_INCONSISTENTE: esperado=2000 recibido=5000","detectedAt":"2026-11-21T15:40:41.515708936Z"}
+Processed a total of 3 messages
+
+## El consumidor sigue activo
+ventas-streams Up About a minute

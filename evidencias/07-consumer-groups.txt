@@ -1,0 +1,31 @@
+# Evidencia 07-consumer-groups
+# Fecha (UTC): 2026-11-21T16:22:34Z
+# Entorno: local
+
+$ powershell -ExecutionPolicy Bypass -File scripts\kafka.ps1 grupos
+
+
+=== Consumer groups ===
+console-consumer-24697
+console-consumer-25427
+ventas-aggregator
+console-consumer-20087
+console-consumer-7899
+
+=== Offsets y lag de ventas-aggregator (LAG = mensajes pendientes) ===
+
+GROUP             TOPIC                                           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                                                                                         HOST            CLIENT-ID
+ventas-aggregator ventas-raw                                      1          55              55              0               ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer-630999b1-6c8f-4222-825a-cc2b6576db58 /192.168.0.8    ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer
+ventas-aggregator ventas-aggregator-por-eventid-repartition       0          5               5               0               ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer-630999b1-6c8f-4222-825a-cc2b6576db58 /192.168.0.8    ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer
+ventas-aggregator ventas-raw                                      2          46              46              0               ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer-630999b1-6c8f-4222-825a-cc2b6576db58 /192.168.0.8    ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer
+ventas-aggregator ventas-aggregator-por-eventid-repartition       2          4               4               0               ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer-630999b1-6c8f-4222-825a-cc2b6576db58 /192.168.0.8    ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer
+ventas-aggregator ventas-aggregator-ventas-por-tienda-repartition 1          141             141             0               ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer-630999b1-6c8f-4222-825a-cc2b6576db58 /192.168.0.8    ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer
+ventas-aggregator ventas-aggregator-por-eventid-repartition       1          18              18              0               ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer-630999b1-6c8f-4222-825a-cc2b6576db58 /192.168.0.8    ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer
+ventas-aggregator ventas-aggregator-ventas-por-tienda-repartition 2          103             103             0               ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer-630999b1-6c8f-4222-825a-cc2b6576db58 /192.168.0.8    ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer
+ventas-aggregator ventas-aggregator-ventas-por-tienda-repartition 0          -               0               -               ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer-630999b1-6c8f-4222-825a-cc2b6576db58 /192.168.0.8    ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer
+ventas-aggregator ventas-raw                                      0          41              41              0               ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer-630999b1-6c8f-4222-825a-cc2b6576db58 /192.168.0.8    ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer
+
+=== Miembros de ventas-aggregator ===
+
+GROUP             CONSUMER-ID                                                                                                         HOST            CLIENT-ID                                                                      #PARTITIONS     
+ventas-aggregator ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer-630999b1-6c8f-4222-825a-cc2b6576db58 /192.168.0.8    ventas-aggregator-0660425b-c53d-45a3-b211-dbbe201c5f3b-StreamThread-1-consumer 9               
