@@ -6,7 +6,7 @@
   Uso: powershell -ExecutionPolicy Bypass -File aws\desplegar-todo.ps1 [-ConPruebas]
   Las credenciales solo se cargan en esta terminal; nunca se imprimen ni se copian a la EC2.
 #>
-param([switch]$ConPruebas)
+param([switch]$ConPruebas, [switch]$AbrirATodos)
 $ErrorActionPreference = "Stop"
 $archivo = Join-Path $PSScriptRoot "credenciales.txt"
 
@@ -28,7 +28,7 @@ Write-Host "Credenciales cargadas desde credenciales.txt (region $env:AWS_DEFAUL
 
 $pasos = @(
     @{ s = "00-verificar.ps1"; a = @("-NuevasCredenciales") },
-    @{ s = "01-red-seguridad.ps1"; a = @() },
+    @{ s = "01-red-seguridad.ps1"; a = $(if ($AbrirATodos) { @("-AbrirATodos") } else { @() }) },
     @{ s = "02-instancia.ps1"; a = @() },
     @{ s = "03-despliegue.ps1"; a = @() }
 )

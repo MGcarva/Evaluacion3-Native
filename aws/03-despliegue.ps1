@@ -31,7 +31,11 @@ find scripts -name '*.sh' -exec sed -i 's/\r$//' {} + && chmod +x scripts/*.sh
 cp .env.example .env
 sed -i 's/^PUBLIC_HOST=.*/PUBLIC_HOST=$($e.ipPublica)/' .env
 echo 'KAFKA_HEAP_OPTS=-Xms256m -Xmx384m' >> .env
+# Clave de admin de Grafana aleatoria (Grafana puede quedar expuesto; la lectura anonima no la necesita)
+echo "GRAFANA_ADMIN_PASSWORD=`$(openssl rand -hex 12)" >> .env
 docker compose up -d --build
+# Aplicar la clave aleatoria aunque Grafana ya estuviera inicializado con otra
+sleep 5; docker exec ventas-grafana grafana cli admin reset-admin-password "`$(grep '^GRAFANA_ADMIN_PASSWORD=' .env | tail -1 | cut -d= -f2)" >/dev/null 2>&1 || true
 echo '--- estado ---'
 docker compose ps -a --format 'table {{.Name}}\t{{.Status}}'
 "@

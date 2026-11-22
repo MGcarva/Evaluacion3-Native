@@ -9,7 +9,7 @@ Idea: lo lento (generador ≈4 min y tests ≈2 min) se lanza **al inicio** en o
 3. Abrir en el navegador y dejar listas las pestañas:
    - Grafana: `http://<IP>:3000` (dashboard *Ventas Streaming - Kafka*)
    - Prometheus: `http://<IP>:9090/targets`
-4. Si Grafana **no carga**: cambiaste de red → ejecutar de nuevo `desplegar-aws.bat` (agrega tu IP nueva al security group).
+4. SSH, Grafana y Prometheus quedan abiertos a cualquier red (temporal para la demo). Si aun así no cargan, la red de la sede puede bloquear esos puertos: usar el **celular como hotspot**.
 
 ## Minuto 0 · Abrir 3 terminales y entrar a la EC2
 
