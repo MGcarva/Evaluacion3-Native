@@ -13,10 +13,17 @@ Idea: lo lento (generador ≈4 min y tests ≈2 min) se lanza **al inicio** en o
 
 ## Minuto 0 · Abrir 3 terminales y entrar a la EC2
 
-En **cada** terminal (PowerShell):
+En **cada** terminal (reemplaza `<IP>` por la IP real, **sin** los signos `< >`):
+
+PowerShell (el prompt empieza con `PS`):
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\ventas-streaming-key.pem" ubuntu@<IP>
 ```
+CMD (el prompt es `C:\...>`):
+```cmd
+ssh -i "%USERPROFILE%\.ssh\ventas-streaming-key.pem" ubuntu@<IP>
+```
+La primera vez responde `yes` a la pregunta de la huella del servidor.
 Ya dentro de la EC2:
 ```bash
 cd ~/ventas-streaming
