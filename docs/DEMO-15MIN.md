@@ -1,5 +1,7 @@
 # Guion de demostración en AWS (15 minutos)
 
+Explicación detallada de cada prueba y de cada panel de Grafana: [EXPLICACION-PRUEBAS.md](EXPLICACION-PRUEBAS.md).
+
 Idea: lo lento (generador ≈4 min y tests ≈2 min) se lanza **al inicio** en otras terminales; mientras corre se presenta lo instantáneo.
 
 ## Antes de tu turno (≈15 min antes)

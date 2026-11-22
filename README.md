@@ -112,7 +112,7 @@ flowchart LR
 
 ## 4. Puesta en marcha
 
-> Atajo: `levantar-local.bat`. Todos los comandos de prueba en [docs/COMANDOS.md](docs/COMANDOS.md).
+> Atajo: `levantar-local.bat`. Todos los comandos de prueba en [docs/COMANDOS.md](docs/COMANDOS.md). Qué demuestra cada prueba y cómo leer Grafana: [docs/EXPLICACION-PRUEBAS.md](docs/EXPLICACION-PRUEBAS.md). Guion de 15 min: [docs/DEMO-15MIN.md](docs/DEMO-15MIN.md).
 
 ```powershell
 # 1) Configuración (valores por defecto documentados; no contiene secretos)
