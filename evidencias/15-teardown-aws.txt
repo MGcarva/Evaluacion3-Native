@@ -1,0 +1,7 @@
+# Evidencia 15 - Teardown AWS
+# Fecha (UTC): 2026-11-22T00:01:39Z
+
+instancias: 0
+volumenes: 0
+security groups: 0
+key pairs: 0
