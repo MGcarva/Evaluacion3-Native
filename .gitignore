@@ -12,3 +12,5 @@ target/
 aws/.no-usar-*
 __pycache__/
 aws/credenciales.txt
+# Archivos temporales de Office
+~$*
