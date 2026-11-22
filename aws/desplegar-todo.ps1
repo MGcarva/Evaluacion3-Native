@@ -28,7 +28,7 @@ Write-Host "Credenciales cargadas desde credenciales.txt (region $env:AWS_DEFAUL
 
 $pasos = @(
     @{ s = "00-verificar.ps1"; a = @("-NuevasCredenciales") },
-    @{ s = "01-red-seguridad.ps1"; a = $(if ($AbrirATodos) { @("-AbrirATodos") } else { @() }) },
+    @{ s = "01-red-seguridad.ps1"; a = @(if ($AbrirATodos) { "-AbrirATodos" }) },
     @{ s = "02-instancia.ps1"; a = @() },
     @{ s = "03-despliegue.ps1"; a = @() }
 )
@@ -38,7 +38,7 @@ $ini = Get-Date
 foreach ($p in $pasos) {
     Write-Host ""
     Write-Host "############ $($p.s) ############" -ForegroundColor Magenta
-    $a = $p.a
+    $a = [string[]]@($p.a)   # siempre arreglo: un solo elemento no debe convertirse en texto al splatear
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot $p.s) @a
     if ($LASTEXITCODE -ne 0) {
         throw "$($p.s) fallo (codigo $LASTEXITCODE). Corrige y vuelve a ejecutar desplegar-aws.bat: los pasos son idempotentes y retoman donde quedaron."
