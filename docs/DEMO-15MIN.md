@@ -17,13 +17,15 @@ En **cada** terminal (reemplaza `<IP>` por la IP real, **sin** los signos `< >`)
 
 PowerShell (el prompt empieza con `PS`):
 ```powershell
-ssh -i "$env:USERPROFILE\.ssh\ventas-streaming-key.pem" ubuntu@<IP>
+ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -i "$env:USERPROFILE\.ssh\ventas-streaming-key.pem" ubuntu@<IP>
 ```
 CMD (el prompt es `C:\...>`):
 ```cmd
-ssh -i "%USERPROFILE%\.ssh\ventas-streaming-key.pem" ubuntu@<IP>
+ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -i "%USERPROFILE%\.ssh\ventas-streaming-key.pem" ubuntu@<IP>
 ```
-La primera vez responde `yes` a la pregunta de la huella del servidor.
+La primera vez responde `yes` a la pregunta de la huella del servidor. `ServerAliveInterval` evita que la red corte la sesión por inactividad.
+
+> Los comandos siguientes solo funcionan cuando el prompt es `ubuntu@ip-…:~$`. Si aparece `client_loop: … Connection reset` y vuelves a `PS C:\…>`, la sesión se cortó: reconecta con el mismo comando.
 Ya dentro de la EC2:
 ```bash
 cd ~/ventas-streaming
