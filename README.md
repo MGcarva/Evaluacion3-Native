@@ -211,6 +211,65 @@ Guardar cualquier salida como evidencia: `scripts\evidencia.ps1 <NN-nombre> "<co
 
 > **Tiempos**: un agregado se publica cuando el reloj del stream pasa *fin de ventana + gracia* (3 min). `suppress` necesita que **llegue un evento posterior**: el generador envía un evento "empujador" tras esperar; con el productor detenido la última ventana queda retenida.
 
+### Enviar datos inválidos y duplicados a mano
+
+Más rápido que el generador: cada mensaje se ve al instante en el log y en la DLQ. Ejecutar en bash (dentro de la EC2 con `ssh … ubuntu@<IP>`, o en local con Git Bash) desde la carpeta del proyecto.
+
+**1. Atajo** (`P` envía a `ventas-raw` lo que recibe como `clave|valor`; `T` es la hora actual). Repetirlo si se corta la sesión:
+
+```bash
+BS=kafka-1:29092
+P(){ docker exec -i ventas-kafka-1 kafka-console-producer --bootstrap-server $BS --topic ventas-raw --property parse.key=true --property key.separator='|'; }
+T=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+```
+
+**2. (Opcional) logs en vivo** en otra terminal (Ctrl+C para salir):
+
+```bash
+docker logs -f --tail 5 ventas-streams 2>&1 | grep --line-buffered -E "rechazado|duplicado|Skipping"
+```
+
+**3. Enviar** (cada comando es un caso independiente):
+
+```bash
+# JSON roto -> DLQ: JSON_INVALIDO
+echo 'demo-roto|{"eventId":"roto-1","store":' | P
+
+# Texto que no es JSON -> DLQ: JSON_INVALIDO
+echo 'demo-texto|esto no es json' | P
+
+# Total incorrecto (2 x 1000 != 5000) -> DLQ: TOTAL_INCONSISTENTE: esperado=2000 recibido=5000
+echo "demo-total|{\"eventId\":\"total-1\",\"eventTime\":\"$T\",\"store\":\"Demo\",\"quantity\":2,\"unitPriceClp\":1000,\"totalClp\":5000}" | P
+
+# Sin tienda -> DLQ: CAMPO_OBLIGATORIO_AUSENTE: store
+echo "demo-sinstore|{\"eventId\":\"ss-1\",\"eventTime\":\"$T\",\"quantity\":1,\"unitPriceClp\":1000,\"totalClp\":1000}" | P
+
+# Cantidad 0 -> DLQ: CANTIDAD_INVALIDA
+echo "demo-cantidad|{\"eventId\":\"q-1\",\"eventTime\":\"$T\",\"store\":\"Demo\",\"quantity\":0,\"unitPriceClp\":1000,\"totalClp\":0}" | P
+
+# Fecha ilegible -> DLQ: EVENTTIME_INVALIDO
+echo "demo-fecha|{\"eventId\":\"f-1\",\"eventTime\":\"ayer\",\"store\":\"Demo\",\"quantity\":1,\"unitPriceClp\":1000,\"totalClp\":1000}" | P
+
+# Duplicado: la misma venta 3 veces con claves distintas -> 2 logs "duplicado ignorado", se cuenta 1 vez
+V="{\"eventId\":\"dup-$RANDOM\",\"eventTime\":\"$T\",\"store\":\"Demo\",\"quantity\":1,\"unitPriceClp\":1000,\"totalClp\":1000}"
+for c in A B C; do echo "cliente-$c|$V" | P; done
+
+# Tardío: venta de hace 10 minutos (fuera de la gracia) -> log "Skipping record", NO va a la DLQ
+V10=$(date -u -d '-10 min' +%Y-%m-%dT%H:%M:%SZ)
+echo "demo-tardio|{\"eventId\":\"viejo-$RANDOM\",\"eventTime\":\"$V10\",\"store\":\"Demo\",\"quantity\":1,\"unitPriceClp\":1000,\"totalClp\":1000}" | P
+```
+
+**4. Verificar:**
+
+```bash
+docker logs ventas-streams 2>&1 | grep -E "rechazado|duplicado|Skipping" | tail -10   # log con correlationId
+./scripts/kafka.sh dlq 1000 | grep demo- | tail -6                                     # mensajes en la DLQ
+```
+
+En Kafka UI (`http://<IP>:8080`, `docker compose --profile ui up -d kafka-ui`): *Topics → ventas-raw-dlq → Messages → Newest First → Submit*; cada mensaje muestra `originalValue`, `key`, `sourceTopic`, `reason` y el mismo `correlationId` del log. En Grafana suben *Mensajes en la DLQ*, *Duplicados ignorados* y *Tardíos descartados*.
+
+Más escenarios (broker caído, min ISR 2, reinicios, ZooKeeper, consultas a Prometheus): [docs/PRUEBAS-RAPIDAS.md](docs/PRUEBAS-RAPIDAS.md).
+
 ### Pruebas automatizadas
 
 `docker compose run --rm tests` (JUnit 5 + `TopologyTestDriver`, sin brokers; reportes en `app/target/surefire-reports`, resumen con `python scripts/reporte_tests.py`):
