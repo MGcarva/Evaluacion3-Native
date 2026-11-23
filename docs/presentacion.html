@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Streaming resiliente de ventas</title>
+<style>
+:root{
+  --bg:#060914; --bg2:#0b1224; --panel:rgba(18,28,54,.72); --line:rgba(120,160,255,.18);
+  --txt:#e6ecff; --mut:#8fa0c8; --cyan:#22d3ee; --vio:#a78bfa; --pink:#f472b6; --ok:#34d399;
+  --warn:#fbbf24; --bad:#f87171; --mono:ui-monospace,"Cascadia Code","Consolas",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--sans);overflow:hidden}
+body::before{content:"";position:fixed;inset:0;background:
+  radial-gradient(1200px 600px at 85% -10%,rgba(167,139,250,.18),transparent 60%),
+  radial-gradient(900px 500px at -10% 110%,rgba(34,211,238,.14),transparent 60%),
+  linear-gradient(var(--line) 1px,transparent 1px) 0 0/48px 48px,
+  linear-gradient(90deg,var(--line) 1px,transparent 1px) 0 0/48px 48px;
+  opacity:.55;pointer-events:none}
+canvas#fondo{position:fixed;inset:0;pointer-events:none;opacity:.55}
+
+/* ---------- estructura ---------- */
+.deck{position:relative;height:100%}
+.slide{position:absolute;inset:0;padding:clamp(20px,4vw,56px) clamp(20px,5vw,80px) 90px;
+  display:flex;flex-direction:column;opacity:0;transform:translateX(40px) scale(.98);
+  transition:opacity .55s ease,transform .55s ease;pointer-events:none;overflow-y:auto}
+.slide.activa{opacity:1;transform:none;pointer-events:auto}
+.slide.previa{transform:translateX(-40px) scale(.98)}
+.kicker{font-family:var(--mono);font-size:.8rem;letter-spacing:.22em;text-transform:uppercase;color:var(--cyan)}
+h2{font-size:clamp(1.6rem,3vw,2.5rem);font-weight:700;margin:.25em 0 .2em;
+  background:linear-gradient(90deg,#fff,var(--cyan) 60%,var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--mut);max-width:70ch;margin-bottom:18px;line-height:1.5}
+.glass{background:var(--panel);border:1px solid var(--line);border-radius:16px;backdrop-filter:blur(10px);
+  box-shadow:0 10px 40px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)}
+.grid2{display:grid;grid-template-columns:1.35fr 1fr;gap:20px;flex:1;min-height:0}
+@media (max-width:900px){.grid2{grid-template-columns:1fr}}
+code,.mono{font-family:var(--mono)}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:.82rem;
+  border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--txt)}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+.btn{font:600 .85rem var(--sans);color:var(--txt);background:linear-gradient(180deg,rgba(34,211,238,.18),rgba(34,211,238,.06));
+  border:1px solid rgba(34,211,238,.45);padding:9px 14px;border-radius:10px;cursor:pointer;transition:.2s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 0 18px rgba(34,211,238,.35)}
+.btn.v{background:linear-gradient(180deg,rgba(167,139,250,.2),rgba(167,139,250,.06));border-color:rgba(167,139,250,.5)}
+.btn.r{background:linear-gradient(180deg,rgba(248,113,113,.2),rgba(248,113,113,.06));border-color:rgba(248,113,113,.5)}
+.btn[aria-pressed=true]{box-shadow:inset 0 0 0 2px var(--cyan)}
+.fila{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+/* ---------- navegacion ---------- */
+.barra{position:fixed;left:0;right:0;bottom:0;height:64px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 24px;background:linear-gradient(0deg,rgba(6,9,20,.95),transparent);z-index:5}
+.puntos{display:flex;gap:10px}
+.puntos button{width:34px;height:6px;border-radius:4px;border:0;background:rgba(255,255,255,.15);cursor:pointer;transition:.3s}
+.puntos button.on{background:linear-gradient(90deg,var(--cyan),var(--vio));width:56px}
+.nav{display:flex;gap:8px;align-items:center;color:var(--mut);font-family:var(--mono);font-size:.85rem}
+.nav button{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--txt);cursor:pointer;font-size:1rem}
+.progreso{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--cyan),var(--vio),var(--pink));transition:width .5s;z-index:6}
+
+/* ---------- slide 1 ---------- */
+.portada{justify-content:center;align-items:flex-start}
+.portada h1{font-size:clamp(2.4rem,6vw,5rem);line-height:1.02;font-weight:800;letter-spacing:-.02em;
+  background:linear-gradient(100deg,#fff 10%,var(--cyan) 45%,var(--vio) 75%,var(--pink));-webkit-background-clip:text;background-clip:text;color:transparent}
+.portada .tag{font-size:clamp(1rem,1.6vw,1.3rem);color:var(--mut);margin:14px 0 26px;max-width:60ch}
+.terminal{font-family:var(--mono);font-size:.9rem;padding:16px 18px;margin-top:28px;width:min(640px,100%);min-height:118px}
+.terminal .p{color:var(--ok)} .terminal .c{color:var(--cyan)}
+.cursor{display:inline-block;width:8px;height:1em;background:var(--cyan);vertical-align:-2px;animation:parp 1s steps(1) infinite}
+@keyframes parp{50%{opacity:0}}
+.meta{display:flex;gap:28px;flex-wrap:wrap;margin-top:26px;color:var(--mut);font-size:.95rem}
+.meta b{display:block;color:var(--txt);font-size:1.05rem}
+
+/* ---------- slide 2: arquitectura ---------- */
+svg .nodo rect{fill:rgba(15,25,50,.92);stroke:rgba(120,160,255,.35);stroke-width:1.2;rx:12;transition:.25s;cursor:pointer}
+svg .nodo text{fill:var(--txt);font:600 13px var(--sans);pointer-events:none}
+svg .nodo text.s{fill:var(--mut);font:11px var(--mono)}
+svg .nodo:hover rect,svg .nodo.sel rect{stroke:var(--cyan);filter:drop-shadow(0 0 10px rgba(34,211,238,.6))}
+svg .nodo.topico rect{stroke:rgba(167,139,250,.55)}
+svg .nodo.dlq rect{stroke:rgba(248,113,113,.6)}
+svg .flecha{stroke:rgba(143,160,200,.45);stroke-width:1.6;fill:none;marker-end:url(#punta)}
+svg .flecha.roja{stroke:rgba(248,113,113,.6)}
+.detalle{padding:20px;display:flex;flex-direction:column;gap:10px}
+.detalle h3{font-size:1.25rem;color:var(--cyan)}
+.detalle ul{padding-left:18px;color:var(--txt);line-height:1.6}
+.detalle li::marker{color:var(--vio)}
+.decisiones{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:auto}
+.dec{padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.02)}
+.dec b{font-family:var(--mono);color:var(--cyan);font-size:1.05rem;display:block}
+.dec span{color:var(--mut);font-size:.78rem}
+
+/* ---------- slide 3: calidad ---------- */
+.tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.tabs button{font:600 .9rem var(--sans);padding:10px 16px;border-radius:12px;border:1px solid var(--line);
+  background:transparent;color:var(--mut);cursor:pointer;transition:.2s}
+.tabs button.on{color:var(--txt);border-color:var(--cyan);background:rgba(34,211,238,.1);box-shadow:0 0 18px rgba(34,211,238,.2)}
+.panelTab{display:none;gap:18px;grid-template-columns:1fr 1fr}
+.panelTab.on{display:grid}
+@media (max-width:900px){.panelTab.on{grid-template-columns:1fr}}
+.caja{padding:18px}
+.caja h4{color:var(--vio);margin-bottom:8px;font-size:1rem}
+.caja p,.caja li{color:var(--mut);line-height:1.55;font-size:.95rem}
+.caja ul{padding-left:18px}
+.log{font-family:var(--mono);font-size:.78rem;background:#050811;border:1px solid var(--line);border-radius:10px;
+  padding:12px;min-height:150px;max-height:230px;overflow:auto;margin-top:10px}
+.log div{opacity:0;animation:entra .4s forwards;white-space:pre-wrap;word-break:break-word}
+.log .w{color:var(--warn)} .log .i{color:var(--cyan)} .log .e{color:var(--bad)} .log .o{color:var(--ok)}
+@keyframes entra{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.contadores{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.cont{padding:12px;border-radius:12px;border:1px solid var(--line);text-align:center}
+.cont b{display:block;font:800 1.9rem var(--mono);color:var(--cyan)}
+.cont span{font-size:.75rem;color:var(--mut)}
+.linea{position:relative;height:120px;margin:16px 6px 6px}
+.linea .eje{position:absolute;left:0;right:0;top:60px;height:2px;background:rgba(255,255,255,.15)}
+.linea .vent{position:absolute;top:40px;height:40px;border-radius:8px;background:rgba(34,211,238,.18);border:1px solid var(--cyan)}
+.linea .gracia{position:absolute;top:40px;height:40px;border-radius:8px;background:repeating-linear-gradient(45deg,rgba(167,139,250,.18) 0 8px,transparent 8px 16px);border:1px dashed var(--vio)}
+.linea .marca{position:absolute;top:92px;font:11px var(--mono);color:var(--mut);transform:translateX(-50%)}
+.linea .ev{position:absolute;top:48px;width:24px;height:24px;border-radius:50%;transform:translateX(-50%);transition:left 1s ease,background .3s;
+  display:grid;place-items:center;font-size:.7rem;font-weight:700}
+.linea .reloj{position:absolute;top:18px;bottom:20px;width:2px;background:var(--pink);box-shadow:0 0 10px var(--pink);transition:left .8s}
+.linea .reloj::after{content:"reloj del stream";position:absolute;top:-16px;left:4px;font:10px var(--mono);color:var(--pink);white-space:nowrap}
+
+/* ---------- slide 4: resiliencia ---------- */
+.brokers{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:12px 0}
+.broker{padding:14px;border-radius:14px;border:1px solid var(--line);transition:.3s;position:relative}
+.broker.caido{opacity:.45;border-color:rgba(248,113,113,.6);filter:grayscale(.6)}
+.broker h4{display:flex;justify-content:space-between;align-items:center;font-size:.95rem}
+.estado{font:600 .72rem var(--mono);padding:3px 8px;border-radius:999px}
+.up{background:rgba(52,211,153,.15);color:var(--ok)} .down{background:rgba(248,113,113,.15);color:var(--bad)}
+.parts{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.part{font:11px var(--mono);padding:5px 7px;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.03)}
+.part.lider{border-color:var(--cyan);color:var(--cyan)}
+.tablaIsr{width:100%;border-collapse:collapse;font:12.5px var(--mono);margin-top:6px}
+.tablaIsr td,.tablaIsr th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+.tablaIsr th{color:var(--mut);font-weight:500}
+.prod{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;margin-top:12px;border:1px solid var(--line);font-size:.9rem}
+.led{width:12px;height:12px;border-radius:50%;flex:none}
+.led.ok{background:var(--ok);box-shadow:0 0 12px var(--ok);animation:pulso 1s infinite}
+.led.bad{background:var(--bad);box-shadow:0 0 12px var(--bad)}
+@keyframes pulso{50%{opacity:.4}}
+.lagbar{height:14px;border-radius:8px;background:rgba(255,255,255,.06);overflow:hidden;margin:8px 0}
+.lagbar div{height:100%;width:0;background:linear-gradient(90deg,var(--warn),var(--bad));transition:width .4s}
+.hecho{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed var(--line);font-size:.9rem;color:var(--mut)}
+.hecho b{color:var(--txt);font-family:var(--mono);min-width:92px}
+
+/* ---------- slide 5: resultados ---------- */
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+@media (max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{padding:16px;text-align:center}
+.kpi b{display:block;font:800 clamp(1.6rem,3vw,2.4rem) var(--mono);background:linear-gradient(90deg,var(--cyan),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
+.kpi span{font-size:.8rem;color:var(--mut)}
+.galeria{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media (max-width:900px){.galeria{grid-template-columns:repeat(2,1fr)}}
+.galeria figure{cursor:zoom-in;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#000;position:relative}
+.galeria img{width:100%;height:110px;object-fit:cover;object-position:top;display:block;transition:transform .4s}
+.galeria figure:hover img{transform:scale(1.06)}
+.galeria figcaption{position:absolute;inset:auto 0 0 0;padding:6px 8px;font-size:.72rem;background:linear-gradient(0deg,rgba(0,0,0,.85),transparent)}
+.visor{position:fixed;inset:0;background:rgba(3,5,12,.92);display:none;place-items:center;z-index:20;cursor:zoom-out;padding:30px}
+.visor.on{display:grid}
+.visor img{max-width:95vw;max-height:85vh;border-radius:12px;border:1px solid var(--line)}
+.visor p{color:var(--mut);margin-top:10px;text-align:center}
+.cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}
+@media (max-width:900px){.cols3{grid-template-columns:1fr}}
+.ayuda{position:fixed;top:14px;right:18px;font:12px var(--mono);color:var(--mut);z-index:6}
+.ayuda kbd{border:1px solid var(--line);border-radius:5px;padding:1px 6px;background:var(--panel)}
+</style>
+</head>
+<body>
+<canvas id="fondo"></canvas>
+<div class="progreso" id="progreso"></div>
+<div class="ayuda"><kbd>←</kbd> <kbd>→</kbd> navegar · <kbd>F</kbd> pantalla completa</div>
+
+<main class="deck" id="deck">
+
+<!-- ===================== 1. PORTADA ===================== -->
+<section class="slide portada activa" data-titulo="Portada">
+  <span class="kicker">DSY1107 · Desarrollo Cloud Native I · Evaluación Parcial N°5</span>
+  <h1>Streaming resiliente<br>de ventas</h1>
+  <p class="tag">Integración, validación y recuperación con <b>Kafka Streams</b>: datos inválidos aislados, duplicados eliminados, ventanas por tiempo de evento y tolerancia a fallos demostrada en local y en AWS.</p>
+  <div class="fila">
+    <span class="chip"><i></i>Apache Kafka 3.9</span>
+    <span class="chip"><i style="background:var(--vio);box-shadow:0 0 10px var(--vio)"></i>Kafka Streams · EOS v2</span>
+    <span class="chip"><i style="background:var(--pink);box-shadow:0 0 10px var(--pink)"></i>Docker Compose</span>
+    <span class="chip"><i style="background:var(--warn);box-shadow:0 0 10px var(--warn)"></i>Prometheus + Grafana</span>
+    <span class="chip"><i style="background:var(--ok);box-shadow:0 0 10px var(--ok)"></i>AWS EC2</span>
+  </div>
+  <div class="terminal glass" id="terminal"></div>
+  <div class="meta">
+    <div><b>Gonzalo</b>Autor</div>
+    <div><b>2 brokers · RF 2</b>Cluster Kafka</div>
+    <div><b>23 / 23</b>Pruebas automatizadas</div>
+    <div><b>github.com/MGcarva/Evaluacion3-Native</b>Repositorio</div>
+  </div>
+</section>
+
+<!-- ===================== 2. ARQUITECTURA ===================== -->
+<section class="slide" data-titulo="Arquitectura">
+  <span class="kicker">01 · Arquitectura y diseño</span>
+  <h2>Del evento de venta al agregado por tienda</h2>
+  <p class="sub">Haz clic en cada componente para ver su función y la decisión de diseño que lo justifica.</p>
+  <div class="grid2">
+    <div class="glass" style="padding:10px;display:flex;align-items:center">
+      <svg viewBox="0 0 760 400" width="100%" id="diagrama" role="img" aria-label="Diagrama de arquitectura">
+        <defs>
+          <marker id="punta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="rgba(143,160,200,.7)"/></marker>
+        </defs>
+        <!-- Aplicacion Kafka Streams (los topicos quedan fuera: son de Kafka) -->
+        <rect x="286" y="88" width="320" height="150" rx="18" fill="rgba(34,211,238,.05)" stroke="rgba(34,211,238,.35)" stroke-dasharray="6 6"/>
+        <text x="300" y="110" fill="#22d3ee" font-size="11.5" font-family="monospace">KAFKA STREAMS · exactly_once_v2</text>
+        <text x="20" y="60" fill="#a78bfa" font-size="11" font-family="monospace">◆ tópico Kafka (2 brokers · RF 2)</text>
+
+        <path class="flecha" d="M130 160 L148 160"/>
+        <path class="flecha" d="M270 160 L298 160"/>
+        <path class="flecha" d="M388 160 L404 160"/>
+        <path class="flecha" d="M490 160 L506 160"/>
+        <path class="flecha" d="M596 160 L626 160"/>
+        <path class="flecha roja" d="M343 195 L343 296"/>
+        <text x="350" y="255" fill="#f87171" font-size="11" font-family="monospace">inválido</text>
+        <text x="273" y="152" fill="#8fa0c8" font-size="10" font-family="monospace">ok</text>
+
+        <g class="nodo" data-n="productor"><rect x="18" y="125" width="112" height="70"/><text x="30" y="155">Productores</text><text class="s" x="30" y="175">clave customerId</text></g>
+        <g class="nodo topico" data-n="raw"><rect x="150" y="125" width="120" height="70"/><text x="162" y="152">◆ ventas-raw</text><text class="s" x="162" y="172">3 part · RF 2 · 7 d</text></g>
+        <g class="nodo" data-n="validar"><rect x="300" y="125" width="88" height="70"/><text x="312" y="155">1 · Validar</text><text class="s" x="312" y="175">JSON+reglas</text></g>
+        <g class="nodo" data-n="dedup"><rect x="406" y="125" width="84" height="70"/><text x="416" y="155">2 · Dedup</text><text class="s" x="416" y="175">eventId</text></g>
+        <g class="nodo" data-n="ventana"><rect x="508" y="125" width="88" height="70"/><text x="518" y="155">3 · Ventana</text><text class="s" x="518" y="175">60s + 120s</text></g>
+        <g class="nodo topico" data-n="agg"><rect x="628" y="125" width="122" height="70"/><text x="638" y="152">◆ ventas-</text><text x="638" y="168">agregadas</text><text class="s" x="638" y="186">clave store</text></g>
+        <g class="nodo dlq" data-n="dlq"><rect x="262" y="298" width="168" height="62"/><text x="276" y="324">◆ ventas-raw-dlq</text><text class="s" x="276" y="344">original + motivo · 30 d</text></g>
+        <g class="nodo" data-n="monitoreo"><rect x="520" y="298" width="230" height="62"/><text x="534" y="324">Prometheus + Grafana</text><text class="s" x="534" y="344">JMX · kafka-exporter · lag · ISR</text></g>
+
+        <circle r="5" fill="#22d3ee"><animateMotion dur="3.2s" repeatCount="indefinite" path="M74 160 L210 160 L344 160 L448 160 L552 160 L690 160"/></circle>
+        <circle r="5" fill="#a78bfa"><animateMotion dur="3.2s" begin="1.1s" repeatCount="indefinite" path="M74 160 L210 160 L344 160 L448 160 L552 160 L690 160"/></circle>
+        <circle r="5" fill="#f87171"><animateMotion dur="2.6s" begin=".6s" repeatCount="indefinite" path="M74 160 L210 160 L343 160 L343 328"/></circle>
+      </svg>
+    </div>
+    <div class="glass detalle" id="detalle"></div>
+  </div>
+  <div class="decisiones" style="margin-top:16px">
+    <div class="dec"><b>RF = 2</b><span>máximo con 2 brokers · RF 3 imposible</span></div>
+    <div class="dec"><b>min ISR = 1</b><span>prioriza disponibilidad ante la caída</span></div>
+    <div class="dec"><b>60 s + 120 s</b><span>ventana tumbling + gracia por eventTime</span></div>
+  </div>
+</section>
+
+<!-- ===================== 3. CALIDAD DE DATOS ===================== -->
+<section class="slide" data-titulo="Calidad de datos">
+  <span class="kicker">02 · Validación, duplicados y tiempo</span>
+  <h2>Ningún dato se pierde sin rastro</h2>
+  <div class="tabs" role="tablist">
+    <button class="on" data-t="t1">Validación y DLQ</button>
+    <button data-t="t2">Duplicados</button>
+    <button data-t="t3">Eventos tardíos</button>
+  </div>
+
+  <div class="panelTab on" id="t1">
+    <div class="glass caja">
+      <h4>Errores de sintaxis y de negocio aislados</h4>
+      <ul>
+        <li>7 motivos: JSON inválido, valor vacío, campo ausente, <code>eventTime</code> inválido, cantidad, precio y <b>total ≠ cantidad × precio</b>.</li>
+        <li>El consumidor <b>sigue activo</b>: el inválido va a <code>ventas-raw-dlq</code>.</li>
+        <li>La DLQ conserva <b>valor original, clave, tópico fuente, motivo</b> y un <code>correlationId</code> que también está en el log.</li>
+      </ul>
+      <div class="fila" style="margin-top:14px">
+        <button class="btn r" onclick="enviarInvalido('json')">Enviar JSON roto</button>
+        <button class="btn r" onclick="enviarInvalido('total')">Enviar total incorrecto</button>
+        <button class="btn" onclick="enviarInvalido('ok')">Enviar venta válida</button>
+      </div>
+    </div>
+    <div class="glass caja">
+      <h4>Log de la aplicación · <span id="estadoApp" class="estado up">RUNNING</span></h4>
+      <div class="log" id="logDlq"><div class="i">Kafka Streams config ventana=60s gracia=120s dedupRetencion=10min rf=2</div></div>
+    </div>
+  </div>
+
+  <div class="panelTab" id="t2">
+    <div class="glass caja">
+      <h4>EOS v2 ≠ deduplicación de negocio</h4>
+      <p><b>exactly_once_v2</b> asegura que un <i>mismo registro</i> no tenga efecto doble ante fallos o reintentos. Pero si la caja envía <b>dos veces la misma venta</b>, Kafka guarda <b>dos registros distintos</b> (offsets 27, 28, 29).</p>
+      <p style="margin-top:8px">Solución: re-key por <code>eventId</code> → <b>state store</b> con retención de 10 min (≥ ventana + gracia), respaldado por changelog: sobrevive reinicios.</p>
+      <div class="fila" style="margin-top:14px">
+        <button class="btn v" onclick="enviarDuplicado()">Enviar la misma venta ×3</button>
+        <button class="btn" onclick="resetDup()">Reiniciar</button>
+      </div>
+    </div>
+    <div class="glass caja">
+      <h4>Resultado</h4>
+      <div class="contadores">
+        <div class="cont"><b id="cRaw">0</b><span>registros en ventas-raw</span></div>
+        <div class="cont"><b id="cDup" style="color:var(--warn)">0</b><span>duplicados ignorados</span></div>
+        <div class="cont"><b id="cAgg" style="color:var(--ok)">0</b><span>sales_count en el agregado</span></div>
+      </div>
+      <div class="log" id="logDup"></div>
+    </div>
+  </div>
+
+  <div class="panelTab" id="t3">
+    <div class="glass caja">
+      <h4>Política de tardíos (ventana 10:00–10:01)</h4>
+      <ul>
+        <li>La venta se asigna por <code>eventTime</code> (cuándo ocurrió), no por cuándo llegó.</li>
+        <li><b>Dentro de la gracia</b> (hasta 10:03): se suma a su ventana.</li>
+        <li><b>Fuera de la gracia</b>: se descarta → log <code>Skipping record for expired window</code> + métrica <code>dropped-records</code>. <b>No va a la DLQ</b>.</li>
+        <li><code>suppress</code> publica <b>un único resultado final</b> cuando cierra la gracia.</li>
+      </ul>
+      <div class="fila" style="margin-top:14px">
+        <button class="btn" onclick="tardio(1)">Venta de 10:00:50 llega 10:02:30</button>
+        <button class="btn r" onclick="tardio(2)">Venta de 10:00:40 llega 10:04:00</button>
+        <button class="btn v" onclick="tardio(0)">Reiniciar</button>
+      </div>
+    </div>
+    <div class="glass caja">
+      <h4>Línea de tiempo</h4>
+      <div class="linea" id="linea">
+        <div class="eje"></div>
+        <div class="vent" style="left:5%;width:20%"></div>
+        <div class="gracia" style="left:25%;width:40%"></div>
+        <div class="marca" style="left:5%">10:00</div><div class="marca" style="left:25%">10:01</div>
+        <div class="marca" style="left:65%">10:03</div><div class="marca" style="left:85%">10:04</div>
+        <div class="reloj" id="reloj" style="left:25%"></div>
+      </div>
+      <div class="log" id="logT" style="min-height:90px"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 4. RESILIENCIA ===================== -->
+<section class="slide" data-titulo="Resiliencia">
+  <span class="kicker">03 · Recuperación y semántica de entrega</span>
+  <h2>Un broker cae y el sistema sigue</h2>
+  <div class="grid2">
+    <div class="glass caja">
+      <h4>Simulador del cluster · tópico ventas-raw (3 particiones, RF 2)</h4>
+      <div class="fila">
+        <button class="btn r" id="bBroker" onclick="toggleBroker()">Detener kafka-2</button>
+        <button class="btn v" id="bIsr" onclick="toggleIsr()">min.insync.replicas = 1</button>
+      </div>
+      <div class="brokers">
+        <div class="broker glass" id="k1"><h4>kafka-1 <span class="estado up">UP</span></h4><div class="parts" id="p_k1"></div></div>
+        <div class="broker glass" id="k2"><h4>kafka-2 <span class="estado up" id="e_k2">UP</span></h4><div class="parts" id="p_k2"></div></div>
+      </div>
+      <table class="tablaIsr"><thead><tr><th>Partición</th><th>Líder</th><th>Réplicas</th><th>ISR</th></tr></thead><tbody id="tIsr"></tbody></table>
+      <div class="prod" id="prod"></div>
+    </div>
+    <div class="glass caja" style="display:flex;flex-direction:column">
+      <h4>Reinicio del consumidor (Kafka Streams)</h4>
+      <div class="fila"><button class="btn r" onclick="pararStreams()">Detener Streams</button><button class="btn" onclick="iniciarStreams()">Reiniciar Streams</button></div>
+      <div style="margin-top:10px;font:12px var(--mono);color:var(--mut)">LAG ventas-aggregator: <b id="lagN" style="color:var(--txt)">0</b></div>
+      <div class="lagbar"><div id="lagBar"></div></div>
+      <div class="log" id="logR" style="min-height:70px;max-height:110px"></div>
+      <h4 style="margin-top:14px">Medido en AWS</h4>
+      <div class="hecho"><b>179 / 20 s</b>ventas confirmadas con kafka-2 caído y min ISR 1</div>
+      <div class="hecho"><b>0 / 25 s</b>con min ISR 2: NotEnoughReplicas (prioriza durabilidad)</div>
+      <div class="hecho"><b>609 = 609</b>confirmadas = mensajes en el tópico: sin pérdida</div>
+      <div class="hecho"><b>27 / 27</b>ventanas correctas tras reiniciar con y sin estado local</div>
+      <div class="hecho" style="border:0"><b>22 → 0</b>gracia 30 s perdía ventas al reiniciar; con 120 s, ninguna</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 5. RESULTADOS ===================== -->
+<section class="slide" data-titulo="Resultados">
+  <span class="kicker">04 · Evidencia, observabilidad y AWS</span>
+  <h2>Resultados verificables en local y en AWS</h2>
+  <div class="kpis">
+    <div class="glass kpi"><b data-n="23" data-s="/23">0</b><span>pruebas JUnit · TopologyTestDriver</span></div>
+    <div class="glass kpi"><b data-n="6" data-s="/6">0</b><span>tipos de inválidos en la DLQ</span></div>
+    <div class="glass kpi"><b data-n="609" data-s="">0</b><span>ventas sin pérdida con broker caído</span></div>
+    <div class="glass kpi"><b data-n="27" data-s="/27">0</b><span>ventanas exactas tras reinicio</span></div>
+    <div class="glass kpi"><b data-n="0" data-s=" rec.">0</b><span>recursos AWS tras el teardown</span></div>
+  </div>
+  <p class="sub" style="margin:16px 0 8px">Grafana y Prometheus durante las pruebas (clic para ampliar):</p>
+  <div class="galeria">
+    <figure data-img="../evidencias/12a-grafana-aws-broker2-caido.png" data-t="AWS · durante la caída: 1 broker, 24 particiones sub-replicadas, ISR 2→1"><img src="../evidencias/12a-grafana-aws-broker2-caido.png" alt=""><figcaption>Broker caído</figcaption></figure>
+    <figure data-img="../evidencias/12b-grafana-aws-recuperado.png" data-t="AWS · recuperado: 2 brokers, 0 sub-replicadas, ISR de vuelta en 2"><img src="../evidencias/12b-grafana-aws-recuperado.png" alt=""><figcaption>Recuperado</figcaption></figure>
+    <figure data-img="../evidencias/13-prometheus-aws-broker2-caido.png" data-t="Prometheus detecta kafka-2 DOWN"><img src="../evidencias/13-prometheus-aws-broker2-caido.png" alt=""><figcaption>Prometheus targets</figcaption></figure>
+    <figure data-img="../evidencias/12-grafana-local-dlq-tardios-duplicados.png" data-t="DLQ, tardíos descartados y duplicados ignorados"><img src="../evidencias/12-grafana-local-dlq-tardios-duplicados.png" alt=""><figcaption>DLQ · tardíos · duplicados</figcaption></figure>
+  </div>
+  <div class="cols3">
+    <div class="glass caja"><h4>☁️ AWS en un clic</h4><p><code>desplegar-aws.bat</code> crea red, llave, EC2 t3.medium, Docker y el mismo compose. <code>pruebas-aws.bat</code> repite los escenarios; <code>destruir-aws.bat</code> limpia todo.</p></div>
+    <div class="glass caja"><h4>🔁 Reproducible</h4><p>Sin Java local: se compila y prueba en Docker. Tópicos por <code>kafka-init</code>, configuración en <code>.env</code> + <code>AppConfig</code>, sin secretos en el repo.</p></div>
+    <div class="glass caja"><h4>⚠️ Límites conocidos</h4><p>ZooKeeper de un nodo, 2 brokers en una máquina, RF 3 imposible, Kafka sin TLS/SASL, caída del consumidor mayor a la gracia.</p></div>
+  </div>
+</section>
+
+</main>
+
+<div class="visor" id="visor" onclick="this.classList.remove('on')"><div><img id="visorImg" alt=""><p id="visorTxt"></p></div></div>
+
+<nav class="barra">
+  <div class="puntos" id="puntos"></div>
+  <div class="nav"><span id="titulo"></span><button onclick="ir(actual-1)" aria-label="Anterior">‹</button><span id="num">1 / 5</span><button onclick="ir(actual+1)" aria-label="Siguiente">›</button></div>
+</nav>
+
+<script>
+/* ---------- fondo: red de particulas ---------- */
+(function(){
+  const c=document.getElementById('fondo'),x=c.getContext('2d');let w,h,pts=[];
+  function tam(){w=c.width=innerWidth;h=c.height=innerHeight;pts=Array.from({length:Math.min(70,Math.floor(w/22))},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.35,vy:(Math.random()-.5)*.35}))}
+  function dib(){x.clearRect(0,0,w,h);for(const p of pts){p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1}
+    for(let i=0;i<pts.length;i++){const a=pts[i];x.fillStyle='rgba(34,211,238,.7)';x.fillRect(a.x,a.y,1.6,1.6);
+      for(let j=i+1;j<pts.length;j++){const b=pts[j],d=Math.hypot(a.x-b.x,a.y-b.y);if(d<130){x.strokeStyle='rgba(167,139,250,'+(1-d/130)*.25+')';x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke()}}}
+    requestAnimationFrame(dib)}
+  addEventListener('resize',tam);tam();dib();
+})();
+
+/* ---------- navegacion ---------- */
+const slides=[...document.querySelectorAll('.slide')];let actual=0;
+const puntos=document.getElementById('puntos');
+slides.forEach((s,i)=>{const b=document.createElement('button');b.setAttribute('aria-label',s.dataset.titulo);b.onclick=()=>ir(i);puntos.appendChild(b)});
+function ir(n){n=Math.max(0,Math.min(slides.length-1,n));slides.forEach((s,i)=>{s.classList.toggle('activa',i===n);s.classList.toggle('previa',i<n)});
+  actual=n;[...puntos.children].forEach((b,i)=>b.classList.toggle('on',i===n));
+  document.getElementById('num').textContent=(n+1)+' / '+slides.length;document.getElementById('titulo').textContent=slides[n].dataset.titulo;
+  document.getElementById('progreso').style.width=((n+1)/slides.length*100)+'%';if(n===4)animarKpis()}
+addEventListener('keydown',e=>{if(['ArrowRight','PageDown',' '].includes(e.key)){e.preventDefault();ir(actual+1)}
+  else if(['ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();ir(actual-1)}
+  else if(e.key==='f'||e.key==='F'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}
+  else if(e.key==='Escape')document.getElementById('visor').classList.remove('on')});
+let tx=null;addEventListener('touchstart',e=>tx=e.touches[0].clientX);addEventListener('touchend',e=>{if(tx===null)return;const d=e.changedTouches[0].clientX-tx;if(Math.abs(d)>60)ir(actual+(d<0?1:-1));tx=null});
+ir(0);
+
+/* ---------- 1: terminal animada ---------- */
+const lineas=[['p','$ '],['c','docker compose up -d --build'],['br'],['o','✔ zookeeper  ✔ kafka-1  ✔ kafka-2  ✔ kafka-init  ✔ streams'],['br'],['p','$ '],['c','docker compose run --rm tests'],['br'],['o','Tests run: 23, Failures: 0 — BUILD SUCCESS']];
+(function escribir(){const t=document.getElementById('terminal');t.innerHTML='';let i=0,j=0,span=null;
+  function paso(){if(i>=lineas.length){t.insertAdjacentHTML('beforeend','<span class="cursor"></span>');setTimeout(escribir,6000);return}
+    const [k,txt]=lineas[i];if(k==='br'){t.appendChild(document.createElement('br'));i++;return setTimeout(paso,250)}
+    if(!span){span=document.createElement('span');span.className=k;span.style.color=k==='o'?'var(--ok)':'';t.appendChild(span)}
+    span.textContent+=txt[j++]||'';if(j>=txt.length){i++;j=0;span=null;return setTimeout(paso,k==='c'?400:60)}setTimeout(paso,k==='o'?8:34)}
+  paso()})();
+
+/* ---------- 2: arquitectura ---------- */
+const info={
+ productor:['Productores',['<code>ProducerApp</code>: ventas válidas continuas.','<code>TestEventGenerator</code>: inválidos, duplicados y tardíos reproducibles.','Clave <code>customerId</code>: todas las ventas de un cliente en la misma partición → <b>orden por cliente</b>.','<code>acks=all</code> + idempotencia: un reintento de red no duplica.']],
+ raw:['ventas-raw',['3 particiones, RF 2, <code>min.insync.replicas=1</code>, retención 7 días.','Creado automáticamente por <code>kafka-init</code> (idempotente).','El extractor toma el tiempo desde <code>eventTime</code>, no desde la llegada.']],
+ validar:['1 · Validación',['Jackson valida el JSON; luego reglas de negocio.','<code>total = cantidad × precio</code>, cantidad y precio &gt; 0, campos obligatorios.','Inválido → DLQ + log <code>evento rechazado correlationId=…</code>.','El flujo <b>continúa</b>: el error no detiene el consumidor.']],
+ dlq:['ventas-raw-dlq',['Retención <b>30 días</b> para investigar y reprocesar.','Guarda <code>originalValue</code>, <code>key</code>, <code>sourceTopic</code>, <code>reason</code>, <code>correlationId</code>, <code>detectedAt</code>.','Misma clave que el evento original (trazabilidad).']],
+ dedup:['2 · Deduplicación',['Re-key por <code>eventId</code> + repartition: las copias llegan a la misma tarea.','State store persistente con changelog (RF 2): sobrevive reinicios.','Retención 10 min ≥ ventana + gracia; purga por punctuator.','Log <code>duplicado ignorado</code> + métrica propia en Grafana.']],
+ ventana:['3 · Ventana',['Re-key por <code>store</code>, ventana <b>tumbling de 60 s</b> por <code>eventTime</code>.','<b>Gracia 120 s</b>: cubre desfase y reordenamiento tras una caída del consumidor.','<code>suppress</code>: un único resultado final por ventana.']],
+ agg:['ventas-agregadas',['Clave <code>store</code>.','<code>window_start</code>, <code>window_end</code>, <code>sales_count</code>, <code>total_clp</code>, <code>avg_ticket_clp</code>.','Escritura transaccional (exactly_once_v2).']],
+ monitoreo:['Observabilidad',['Agente JMX en brokers, ZooKeeper y Streams.','kafka-exporter: brokers, ISR, offsets y lag.','Prometheus (10 s) → Grafana con dashboard provisionado.','Paneles: sub-replicadas, ISR, lag, DLQ, tardíos, duplicados, heap.']],
+};
+function mostrar(n){const [t,l]=info[n];document.getElementById('detalle').innerHTML='<span class="kicker">componente</span><h3>'+t+'</h3><ul>'+l.map(x=>'<li>'+x+'</li>').join('')+'</ul>';
+  document.querySelectorAll('#diagrama .nodo').forEach(g=>g.classList.toggle('sel',g.dataset.n===n))}
+document.querySelectorAll('#diagrama .nodo').forEach(g=>g.addEventListener('click',()=>mostrar(g.dataset.n)));mostrar('validar');
+
+/* ---------- 3: tabs ---------- */
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.panelTab').forEach(p=>p.classList.toggle('on',p.id===b.dataset.t))});
+function log(id,cls,txt){const d=document.createElement('div');d.className=cls;d.textContent=txt;const l=document.getElementById(id);l.appendChild(d);l.scrollTop=l.scrollHeight}
+const uid=()=>Math.random().toString(16).slice(2,10);
+function enviarInvalido(tipo){const id=uid();
+  if(tipo==='ok'){log('logDlq','o','✔ venta válida eventId='+id+' → re-key eventId → ventana 10:00 de "Paris Online"');return}
+  const motivo=tipo==='json'?'JSON_INVALIDO: JsonEOFException':'TOTAL_INCONSISTENTE: esperado=2000 recibido=5000';
+  const orig=tipo==='json'?'{"eventId":"bad-001","store":':'{"eventId":"bad-003","quantity":2,"unitPriceClp":1000,"totalClp":5000,…}';
+  log('logDlq','w','WARN evento rechazado correlationId='+id+' topico=ventas-raw clave=cliente-0042 motivo='+motivo);
+  setTimeout(()=>log('logDlq','e','DLQ ← {"correlationId":"'+id+'","sourceTopic":"ventas-raw","key":"cliente-0042","originalValue":'+JSON.stringify(orig)+',"reason":"'+motivo+'"}'),350);
+  const e=document.getElementById('estadoApp');e.textContent='RUNNING ✓';}
+let dup=false;
+function enviarDuplicado(){if(dup)return;dup=true;let r=0;const raw=document.getElementById('cRaw'),cd=document.getElementById('cDup'),ca=document.getElementById('cAgg');
+  ['cliente-A','cliente-B','cliente-C'].forEach((k,i)=>setTimeout(()=>{r++;raw.textContent=r;
+    if(i===0){ca.textContent=1;log('logDup','o','offset '+(27+i)+' clave='+k+' eventId=dup-1 → primera vez: se cuenta')}
+    else{cd.textContent=i;log('logDup','w','offset '+(27+i)+' clave='+k+' → duplicado ignorado eventId=dup-1')}
+    if(i===2)setTimeout(()=>log('logDup','i','agregado Tienda D: sales_count=1 total_clp=3000 ✔'),400)},i*700))}
+function resetDup(){dup=false;['cRaw','cDup','cAgg'].forEach(i=>document.getElementById(i).textContent=0);document.getElementById('logDup').innerHTML=''}
+function tardio(caso){const lin=document.getElementById('linea');lin.querySelectorAll('.ev').forEach(e=>e.remove());document.getElementById('logT').innerHTML='';
+  const reloj=document.getElementById('reloj');if(caso===0){reloj.style.left='25%';return}
+  const ev=document.createElement('div');ev.className='ev';ev.textContent='$';lin.appendChild(ev);
+  if(caso===1){reloj.style.left='55%';ev.style.left='55%';ev.style.background='var(--warn)';log('logT','i','reloj = 10:02:30 · llega venta con eventTime 10:00:50');
+    setTimeout(()=>{ev.style.left='21%';ev.style.background='var(--ok)';log('logT','o','✔ ventana 10:00 sigue abierta (gracia hasta 10:03) → se SUMA')},700)}
+  else{reloj.style.left='85%';ev.style.left='85%';ev.style.background='var(--warn)';log('logT','i','reloj = 10:04:00 · llega venta con eventTime 10:00:40');
+    setTimeout(()=>{ev.style.left='17%';ev.style.background='var(--bad)';log('logT','w','WARN Skipping record for expired window. expiration=10:03:00 streamTime=10:04:00');
+      log('logT','i','dropped-records +1 en Grafana · NO va a la DLQ (no es un dato inválido)')},700)}}
+
+/* ---------- 4: simulador ---------- */
+let k2=true,minIsr=1,lag=0,streams=true,tLag=null;
+const parts=[{p:0,r:[2,1]},{p:1,r:[1,2]},{p:2,r:[2,1]}];
+function render(){const vivos=k2?[1,2]:[1];
+  document.getElementById('k2').classList.toggle('caido',!k2);const e=document.getElementById('e_k2');e.textContent=k2?'UP':'DOWN';e.className='estado '+(k2?'up':'down');
+  document.getElementById('bBroker').textContent=k2?'Detener kafka-2':'Reiniciar kafka-2';
+  document.getElementById('bIsr').textContent='min.insync.replicas = '+minIsr;
+  const filas=[],en={1:[],2:[]};
+  parts.forEach(x=>{const lider=x.r.find(b=>vivos.includes(b));const isr=x.r.filter(b=>vivos.includes(b));
+    x.r.forEach(b=>en[b].push('<span class="part '+(b===lider?'lider':'')+'">P'+x.p+(b===lider?' ★':'')+'</span>'));
+    filas.push('<tr><td>ventas-raw-'+x.p+'</td><td>'+lider+'</td><td>'+x.r.join(',')+'</td><td style="color:'+(isr.length<2?'var(--bad)':'var(--ok)')+'">'+isr.join(',')+'</td></tr>')});
+  document.getElementById('p_k1').innerHTML=en[1].join('');document.getElementById('p_k2').innerHTML=en[2].join('');
+  document.getElementById('tIsr').innerHTML=filas.join('');
+  const bloqueado=!k2&&minIsr===2,sub=k2?0:3;
+  document.getElementById('prod').innerHTML=bloqueado
+    ?'<span class="led bad"></span><div><b>Productor BLOQUEADO</b> · NotEnoughReplicas: acks=all exige 2 copias y solo hay 1. Reintenta sin perder la venta.</div>'
+    :'<span class="led ok"></span><div><b>Produciendo ~5 ventas/s</b> · acks=all'+(sub?' · <span style="color:var(--warn)">'+sub+' particiones sub-replicadas</span>':' · ISR completo')+'</div>'}
+function toggleBroker(){k2=!k2;render()}
+function toggleIsr(){minIsr=minIsr===1?2:1;render()}
+function pararStreams(){if(!streams)return;streams=false;log('logR','w','docker compose stop streams');clearInterval(tLag);
+  tLag=setInterval(()=>{lag=Math.min(lag+3,90);pintaLag()},300)}
+function iniciarStreams(){if(streams)return;streams=true;clearInterval(tLag);log('logR','i','Finished restoring changelog … ventas-por-tienda / dedup-eventid');
+  setTimeout(()=>log('logR','o','State transition from REBALANCING to RUNNING'),500);
+  setTimeout(()=>{tLag=setInterval(()=>{lag=Math.max(0,lag-6);pintaLag();if(lag===0){clearInterval(tLag);log('logR','o','LAG 0 · continuó desde el último offset confirmado ✔')}},120)},900)}
+function pintaLag(){document.getElementById('lagN').textContent=lag;document.getElementById('lagBar').style.width=(lag/90*100)+'%'}
+render();
+
+/* ---------- 5: kpis y visor ---------- */
+let kpisHechos=false;
+function animarKpis(){if(kpisHechos)return;kpisHechos=true;document.querySelectorAll('.kpi b').forEach(b=>{const fin=+b.dataset.n,suf=b.dataset.s;let v=0;const paso=Math.max(1,Math.ceil(fin/40));
+  const t=setInterval(()=>{v=Math.min(fin,v+paso);b.textContent=v+suf;if(v>=fin)clearInterval(t)},30);if(fin===0)b.textContent='0'+suf})}
+document.querySelectorAll('.galeria figure').forEach(f=>f.onclick=()=>{document.getElementById('visorImg').src=f.dataset.img;document.getElementById('visorTxt').textContent=f.dataset.t;document.getElementById('visor').classList.add('on')});
+</script>
+</body>
+</html>
