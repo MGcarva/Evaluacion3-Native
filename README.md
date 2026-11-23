@@ -255,7 +255,7 @@ powershell -ExecutionPolicy Bypass -File aws\99-destruir.ps1        # borra inst
 ```
 
 - Los scripts **ignoran `~/.aws/credentials`**: solo usan las variables de la terminal. No imprimen claves ni el ARN completo.
-- `desplegar-aws.bat` abre **22 (SSH), 3000 (Grafana) y 9090 (Prometheus) a todo internet** para poder presentar desde cualquier red (SSH exige la llave `.pem`; Grafana es de solo lectura y su admin recibe una clave aleatoria). **Kafka (9092-9093) y Kafka UI (8080) quedan solo a tu IP /32**: no tienen autenticación ni TLS. Sin `-AbrirATodos` (scripts por separado) todo queda restringido a tu IP. Es una exposición **temporal**: destruir con `destruir-aws.bat` al terminar.
+- `desplegar-aws.bat` abre **todos los puertos a todo internet** (22 SSH, 3000 Grafana, 9090 Prometheus, 8080 Kafka UI en **solo lectura**, 9092-9093 Kafka) para presentar desde cualquier red. SSH exige la llave `.pem` y Grafana es de solo lectura (admin con clave aleatoria), pero **Kafka no tiene autenticación**: cualquiera podría leer o escribir mensajes. Es una exposición **temporal** para la demo: destruir con `destruir-aws.bat` al terminar. Sin `-AbrirATodos` todo queda restringido a tu IP /32.
 - Si vencen las credenciales (~3 h), exporta las nuevas, ejecuta `00-verificar.ps1 -NuevasCredenciales` y retoma el paso donde quedó.
 
 ---

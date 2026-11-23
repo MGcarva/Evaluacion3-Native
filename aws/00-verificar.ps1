@@ -47,7 +47,7 @@ if ($null -ne $kp) { Write-Ok "Se pueden listar key pairs (ec2:DescribeKeyPairs)
 $perfiles = Test-Aws iam list-instance-profiles --query "InstanceProfiles[].InstanceProfileName"
 if ($perfiles) { Write-Ok "Perfiles de instancia visibles: $($perfiles -join ', ')" } else { Write-Aviso "IAM no visible (normal en cuentas educativas; no se necesita)" }
 
-Write-Paso "Tu IP publica (Kafka 9092-9093 y 8080 solo a ella; con desplegar-aws.bat, SSH/Grafana/Prometheus quedan abiertos a cualquier red)"
+Write-Paso "Tu IP publica (con desplegar-aws.bat todos los puertos quedan abiertos a cualquier red; sin -AbrirATodos, solo a esta IP)"
 $ip = Get-MiIpPublica
 Write-Ok "$ip/32"
 Set-Estado @{ miIp = $ip }

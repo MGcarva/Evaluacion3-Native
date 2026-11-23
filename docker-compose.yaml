@@ -254,6 +254,7 @@ services:
       KAFKA_CLUSTERS_0_NAME: ventas
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:29092,kafka-2:29092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      KAFKA_CLUSTERS_0_READONLY: "true"   # solo lectura: no se pueden borrar topicos ni enviar mensajes desde la web
     depends_on:
       kafka-init:
         condition: service_completed_successfully
